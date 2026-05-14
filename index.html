@@ -1,0 +1,2602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a14">
+<title>Basic Survivors-Like HTML Game Template</title>
+<style>
+/* ============================================================
+   BASIC SURVIVORS-LIKE HTML GAME TEMPLATE
+   ----------------------------------------------------------
+   QUICK-START FOR BUYERS:
+     1. Edit the CONFIG object below for theme, stats, balance.
+     2. Replace WEAPONS / ENEMIES / UPGRADES arrays to add content.
+     3. Procedural audio - no assets needed. Replace with samples
+        in the SFX object if desired.
+     4. Works on desktop (WASD/Arrows + Mouse), Mobile (touch
+        joystick), and Gamepad (Xbox-style left stick).
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:        #0a0a14;
+  --bg-grid:  #11142055;
+  --fg:        #e8eef7;
+  --accent:    #4ade80;
+  --accent-2:  #22d3ee;
+  --warn:      #f87171;
+  --xp:        #fbbf24;
+  --panel:     #0f1420ee;
+  --panel-bd:  #2a3550;
+  --shadow:    0 8px 30px #000a;
+  --font-display: 'Orbitron', 'Rajdhani', system-ui, sans-serif;
+  --font-body:    'Rajdhani', 'Inter', system-ui, sans-serif;
+
+  /* iOS notch / nav-bar safe area */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+
+  /* Responsive sizes — scale with smallest viewport dimension */
+  --pad:    clamp(8px,  1.8vmin, 16px);
+  --gap:    clamp(4px,  1vmin,   10px);
+  --fs-xs:  clamp(9px,  1.5vmin, 11px);
+  --fs-sm:  clamp(11px, 1.9vmin, 14px);
+  --fs-md:  clamp(13px, 2.3vmin, 17px);
+  --fs-lg:  clamp(20px, 4.4vmin, 32px);
+  --fs-xl:  clamp(28px, 6vmin,   46px);
+  --bar-h:  clamp(7px,  1.4vmin, 11px);
+  --slot:   clamp(30px, 5.5vmin, 40px);
+  --btn-sm: clamp(34px, 5.8vmin, 44px);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{
+  position:fixed; inset:0;
+  width:100%; height:100%;
+  overflow:hidden;
+  background:var(--bg); color:var(--fg);
+  font-family:var(--font-body);
+  touch-action:none;
+  overscroll-behavior:none;
+  -webkit-text-size-adjust:100%;
+}
+canvas{display:block;position:absolute;inset:0;width:100%;height:100%;background:var(--bg)}
+
+/* ===== HUD container ===== */
+#hud{
+  position:fixed; inset:0;
+  pointer-events:none;
+  font-family:var(--font-display); font-weight:700;
+  z-index:5;
+}
+
+/* Top bar uses CSS grid: [stats] [timer] [level+pause]  — guarantees no overlap */
+#topbar{
+  position:absolute;
+  top:    calc(var(--sat) + var(--pad));
+  left:   calc(var(--sal) + var(--pad));
+  right:  calc(var(--sar) + var(--pad));
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items:start;
+  gap: var(--gap);
+}
+
+.stat-block{
+  display:flex; flex-direction:column;
+  gap: 3px;
+  min-width:0;
+  max-width: clamp(120px, 28vw, 240px);
+}
+.stat-label{
+  font-size: var(--fs-xs);
+  letter-spacing: 1.5px;
+  opacity: .7;
+  text-transform: uppercase;
+}
+.bar{
+  height: var(--bar-h);
+  background: #000a;
+  border: 1px solid #fff2;
+  border-radius: 2px;
+  overflow:hidden;
+}
+.bar-fill{height:100%;transition:width .15s}
+#hpFill{background:linear-gradient(90deg,#16a34a,#4ade80)}
+#xpFill{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+
+#timer{
+  font-size: var(--fs-lg);
+  letter-spacing: clamp(1px, 0.6vmin, 3px);
+  text-shadow: 0 2px 8px #000;
+  text-align:center;
+  white-space:nowrap;
+  align-self:center;
+  justify-self:center;
+}
+
+/* Right cluster: pause button + level info, side by side */
+.right-cluster{
+  display:flex; align-items:flex-start;
+  justify-content:flex-end;
+  gap: var(--gap);
+  min-width:0;
+}
+#pauseBtn{
+  width:  var(--btn-sm);
+  height: var(--btn-sm);
+  border-radius: 8px;
+  background: #0008;
+  border: 1px solid var(--panel-bd);
+  color: var(--fg);
+  font-size: clamp(14px, 2.5vmin, 18px);
+  cursor:pointer;
+  pointer-events:auto;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+#lvlBox{
+  display:flex; flex-direction:column;
+  align-items:flex-end;
+  gap: 2px;
+  min-width:0;
+}
+.lvl-line{ font-size: var(--fs-md); color: var(--accent); white-space:nowrap }
+#kills   { font-size: var(--fs-xs); color: var(--accent-2); white-space:nowrap }
+
+/* ===== Weapons — bottom-right (away from joystick area on left) ===== */
+#weaponBar{
+  position:absolute;
+  bottom: calc(var(--sab) + var(--pad));
+  right:  calc(var(--sar) + var(--pad));
+  display:flex; flex-direction:row;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content:flex-end;
+  max-width: 60vw;
+}
+.weapon-slot{
+  width:  var(--slot);
+  height: var(--slot);
+  background: #000a;
+  border: 1px solid var(--panel-bd);
+  border-radius: 6px;
+  display:flex; align-items:center; justify-content:center;
+  position:relative;
+}
+.weapon-slot .icon{ font-size: clamp(13px, 2.6vmin, 19px) }
+.weapon-slot .lvl{
+  position:absolute; bottom:-3px; right:-3px;
+  background: var(--accent); color:#000;
+  font-size: clamp(8px, 1.4vmin, 10px);
+  padding: 1px 4px; border-radius: 8px;
+  font-weight: 900;
+}
+
+/* ===== Touch joystick — appears wherever finger lands, scales to screen ===== */
+#joystick{
+  position:fixed;
+  width:  clamp(90px, 22vmin, 150px);
+  height: clamp(90px, 22vmin, 150px);
+  border-radius: 50%;
+  background: #fff1;
+  border: 2px solid #fff3;
+  display:none;
+  touch-action:none;
+  pointer-events:none;
+  z-index: 6;
+  /* default position (overridden on touch) */
+  bottom: calc(var(--sab) + 30px);
+  left:   calc(var(--sal) + 30px);
+}
+#joystick.active{display:block}
+#stickKnob{
+  position:absolute;
+  top:50%; left:50%;
+  width:  45%;
+  height: 45%;
+  border-radius: 50%;
+  background: #fff3;
+  border: 2px solid var(--accent);
+  transform: translate(-50%,-50%);
+  transition: none;
+  box-shadow: 0 0 12px var(--accent);
+}
+
+/* ===== Centered overlays ===== */
+.overlay{
+  position:fixed; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  padding: max(var(--pad), 12px);
+  background: #000c;
+  backdrop-filter: blur(6px);
+  z-index:10;
+  pointer-events:auto;
+}
+.panel{
+  background: var(--panel);
+  border: 1px solid var(--panel-bd);
+  border-radius: 14px;
+  padding: clamp(16px, 3vmin, 28px);
+  max-width: 540px;
+  width: 100%;
+  max-height: calc(100vh - 2 * var(--pad) - var(--sat) - var(--sab));
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+  text-align:center;
+}
+.panel h1{
+  font-family: var(--font-display); font-weight:900;
+  letter-spacing: clamp(1px, 0.6vmin, 3px);
+  font-size: clamp(20px, 4.6vmin, 34px);
+  line-height: 1.15;
+  margin-bottom: 10px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.panel h2{
+  font-family: var(--font-display); font-weight:700;
+  letter-spacing: clamp(2px, 0.8vmin, 4px);
+  font-size: clamp(18px, 3.6vmin, 26px);
+  margin-bottom: 14px;
+  color: var(--accent);
+}
+.panel p{
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  opacity: .85;
+  margin-bottom: 14px;
+}
+.btn{
+  font-family: var(--font-display); font-weight:700;
+  letter-spacing: 2px;
+  padding: clamp(10px, 1.6vmin, 14px) clamp(18px, 3vmin, 28px);
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  transition: all .15s;
+  margin: 4px;
+  min-height: 44px; /* touch target */
+}
+.btn:hover,.btn.focused{background:var(--accent);color:#000;transform:translateY(-2px)}
+.btn-warn{color:var(--warn);border-color:var(--warn)}
+.btn-warn:hover,.btn-warn.focused{background:var(--warn);color:#000}
+
+/* ===== Level-up upgrade picker ===== */
+#upgradeChoices{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.upgrade-card{
+  background: #000a;
+  border: 1px solid var(--panel-bd);
+  border-radius: 10px;
+  padding: clamp(10px, 1.8vmin, 16px);
+  cursor:pointer;
+  transition: all .15s;
+  text-align:left;
+  display:flex; align-items:center;
+  gap: clamp(8px, 1.6vmin, 14px);
+  min-height: 56px;
+}
+.upgrade-card:hover,.upgrade-card.focused{
+  border-color: var(--accent);
+  background: #0a1628;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 20px var(--accent)33;
+}
+.upg-icon{ font-size: clamp(22px, 4vmin, 32px); width: clamp(36px, 6vmin, 48px); text-align:center; flex-shrink:0 }
+.upg-meta{ flex:1; min-width:0 }
+.upg-name{ font-family: var(--font-display); font-weight:700; letter-spacing:1.5px; color: var(--accent); font-size: var(--fs-sm); margin-bottom: 2px }
+.upg-desc{ font-size: clamp(11px, 1.8vmin, 13px); opacity: .85 }
+.upg-lvl { font-size: clamp(10px, 1.5vmin, 11px); color: var(--accent-2); letter-spacing: 1px; margin-top: 3px }
+
+/* ===== Damage numbers ===== */
+.dmg-num{
+  position:absolute;
+  font-family: var(--font-display); font-weight:700;
+  font-size: clamp(11px, 1.8vmin, 14px);
+  color: var(--accent);
+  text-shadow: 0 1px 3px #000;
+  pointer-events:none;
+  z-index:5;
+  animation: floatUp .8s forwards;
+  white-space:nowrap;
+}
+.dmg-num.crit{ color: var(--xp); font-size: clamp(15px, 2.4vmin, 18px) }
+@keyframes floatUp{
+  0%   { opacity:1; transform: translate(-50%, 0) }
+  100% { opacity:0; transform: translate(-50%, -40px) }
+}
+
+@keyframes pulse{0%,100%{opacity:.7}50%{opacity:1}}
+.pulse{animation:pulse 1.5s ease-in-out infinite}
+
+/* ===== Settings screen ===== */
+.settings-list{
+  display:flex; flex-direction:column;
+  gap: 6px;
+  margin: 12px 0 16px;
+}
+.setting-row{
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #000a;
+  border: 1px solid var(--panel-bd);
+  border-radius: 8px;
+  transition: all .15s;
+}
+.setting-row.focused{
+  border-color: var(--accent);
+  background: #0a1628;
+  box-shadow: 0 0 12px var(--accent)33;
+  transform: scale(1.01);
+}
+.setting-row > label{
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  flex: 1 1 auto;
+  text-align: left;
+  min-width: 110px;
+}
+.setting-control{
+  display:flex; align-items:center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.segmented{
+  display:flex; gap: 3px;
+  background: #0006;
+  border-radius: 6px;
+  padding: 3px;
+}
+.seg{
+  background: transparent;
+  color: var(--fg);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-xs);
+  letter-spacing: 1px;
+  cursor: pointer;
+  min-height: 32px;
+  min-width: 46px;
+  transition: all .12s;
+}
+.seg.active{
+  background: var(--accent);
+  color: #000;
+  box-shadow: 0 0 8px var(--accent)66;
+}
+.seg:hover:not(.active){ background: var(--accent)22 }
+.vol-bar{
+  width: clamp(70px, 18vmin, 130px);
+  height: var(--bar-h);
+  background: #000a;
+  border: 1px solid #fff2;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.vol-fill{
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  transition: width .12s;
+}
+.vol-value{
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--accent-2);
+  min-width: 36px;
+  text-align: right;
+}
+.seg-btn{
+  width: 30px; height: 30px;
+  background: #0006;
+  border: 1px solid var(--panel-bd);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  display:flex; align-items:center; justify-content:center;
+  padding:0;
+}
+.seg-btn:hover{ background: var(--accent)33; border-color: var(--accent) }
+
+/* Landscape phones — stack the topbar tighter */
+@media (max-height: 480px){
+  :root{ --pad: 6px }
+  .stat-block{ max-width: 22vw }
+}
+/* Very narrow portrait phones — extra compaction */
+@media (max-width: 380px){
+  :root{ --gap: 3px }
+  .lvl-line{ font-size: var(--fs-sm) }
+}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="topbar">
+    <div class="stat-block">
+      <span class="stat-label">HP</span>
+      <div class="bar"><div class="bar-fill" id="hpFill" style="width:100%"></div></div>
+      <span class="stat-label" style="margin-top:3px">XP</span>
+      <div class="bar"><div class="bar-fill" id="xpFill" style="width:0%"></div></div>
+    </div>
+    <div id="timer">00:00</div>
+    <div class="right-cluster">
+      <div id="lvlBox">
+        <div class="lvl-line">LVL <span id="lvlNum">1</span></div>
+        <div id="kills">KILLS 0</div>
+      </div>
+      <button id="pauseBtn" aria-label="Pause">⏸</button>
+    </div>
+  </div>
+  <div id="weaponBar"></div>
+</div>
+
+<!-- Touch joystick (auto-shows on touch devices, repositions to finger) -->
+<div id="joystick"><div id="stickKnob"></div></div>
+
+<!-- Start menu -->
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>BASIC SURVIVORS-LIKE<br>HTML GAME TEMPLATE</h1>
+    <p>Survive the swarm. Level up. Choose your path.</p>
+    <p style="font-size:13px;opacity:.6">WASD / Arrows · Mouse aim · Touch joystick · Gamepad</p>
+    <button class="btn focused" id="startBtn">START</button>
+    <button class="btn" id="howtoBtn">HOW TO PLAY</button>
+    <button class="btn" id="settingsBtn">SETTINGS</button>
+  </div>
+</div>
+
+<!-- How to play -->
+<div id="howto" class="overlay" style="display:none">
+  <div class="panel">
+    <h2>HOW TO PLAY</h2>
+    <p style="text-align:left;font-size:14px">
+      ◆ Move with <b>WASD / Arrows</b>, drag <b>touch joystick</b>, or use <b>Gamepad left stick</b>.<br><br>
+      ◆ Weapons fire <b>automatically</b> at nearest enemies. Focus on <b>positioning</b>.<br><br>
+      ◆ Collect <b>XP gems</b> dropped by foes to level up.<br><br>
+      ◆ Each level, <b>pick one of three upgrades</b>.<br><br>
+      ◆ Survive <b>15 minutes</b> to win.<br><br>
+      ◆ Press <b>P / ESC</b> to pause. <b>Start button</b> on gamepad.
+    </p>
+    <button class="btn focused" id="howtoBack">BACK</button>
+  </div>
+</div>
+
+<!-- Level-up screen -->
+<div id="levelUp" class="overlay" style="display:none">
+  <div class="panel">
+    <h2>LEVEL UP</h2>
+    <p style="font-size:13px;opacity:.7">Choose an upgrade</p>
+    <div id="upgradeChoices"></div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="settings" class="overlay" style="display:none">
+  <div class="panel">
+    <h2>SETTINGS</h2>
+    <div class="settings-list">
+      <div class="setting-row" data-setting="volume">
+        <label>Master Volume</label>
+        <div class="setting-control">
+          <button class="seg-btn" data-vol="-1" aria-label="Volume down">−</button>
+          <div class="vol-bar"><div class="vol-fill" id="volFill"></div></div>
+          <button class="seg-btn" data-vol="1" aria-label="Volume up">+</button>
+          <span class="vol-value" id="volValue">50%</span>
+        </div>
+      </div>
+      <div class="setting-row" data-setting="muted">
+        <label>SFX</label>
+        <div class="setting-control segmented" data-seg="muted">
+          <button class="seg" data-value="false">ON</button>
+          <button class="seg" data-value="true">MUTED</button>
+        </div>
+      </div>
+      <div class="setting-row" data-setting="stickSide">
+        <label>Joystick Side</label>
+        <div class="setting-control segmented" data-seg="stickSide">
+          <button class="seg" data-value="left">LEFT</button>
+          <button class="seg" data-value="right">RIGHT</button>
+        </div>
+      </div>
+      <div class="setting-row" data-setting="performance">
+        <label>Performance</label>
+        <div class="setting-control segmented" data-seg="performance">
+          <button class="seg" data-value="high">HIGH</button>
+          <button class="seg" data-value="low">LOW</button>
+        </div>
+      </div>
+      <div class="setting-row" data-setting="screenShake">
+        <label>Screen Shake</label>
+        <div class="setting-control segmented" data-seg="screenShake">
+          <button class="seg" data-value="true">ON</button>
+          <button class="seg" data-value="false">OFF</button>
+        </div>
+      </div>
+      <div class="setting-row" data-setting="damageNumbers">
+        <label>Damage Numbers</label>
+        <div class="setting-control segmented" data-seg="damageNumbers">
+          <button class="seg" data-value="true">ON</button>
+          <button class="seg" data-value="false">OFF</button>
+        </div>
+      </div>
+    </div>
+    <button class="btn focused" id="settingsBack">BACK</button>
+  </div>
+</div>
+
+<!-- Pause menu -->
+<div id="pause" class="overlay" style="display:none">
+  <div class="panel">
+    <h2>PAUSED</h2>
+    <button class="btn focused" id="resumeBtn">RESUME</button>
+    <button class="btn" id="pauseSettingsBtn">SETTINGS</button>
+    <button class="btn btn-warn" id="quitBtn">QUIT</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div id="gameOver" class="overlay" style="display:none">
+  <div class="panel">
+    <h2 id="goTitle" style="color:var(--warn)">YOU DIED</h2>
+    <p id="goStats">Survived 00:00 · 0 kills · Level 1</p>
+    <button class="btn focused" id="retryBtn">RETRY</button>
+    <button class="btn" id="menuBtn">MAIN MENU</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* =================================================================================
+   ╔════════════════════════════════════════════════════════════════════════════════╗
+   ║   SECTION 1 — MASTER CONFIGURATION PANEL                                       ║
+   ║                                                                                ║
+   ║   This is the central tuning panel for the entire game. Every gameplay         ║
+   ║   value, balance number, visual effect parameter, and input threshold lives    ║
+   ║   here. Edit values to retune, rebalance, or reskin the game without touching  ║
+   ║   any other code.                                                              ║
+   ║                                                                                ║
+   ║   ORGANIZATION:                                                                ║
+   ║     META         — Identity (title, version)                                   ║
+   ║     RUN          — Run length / win condition                                  ║
+   ║     PLAYER       — Base stats and visual properties                            ║
+   ║     WORLD        — Arena size, grid, background                                ║
+   ║     CAMERA       — Follow smoothness, screen shake amounts                     ║
+   ║     DIFFICULTY   — Time-based scaling, drop counts, knockback                  ║
+   ║     XP           — Level-up curve                                              ║
+   ║     SPAWN        — Enemy spawn pacing, boss times, burst sizes                 ║
+   ║     GEMS         — XP pickup behavior (magnet, drag, bob)                     ║
+   ║     PARTICLES    — FX defaults and counts                                      ║
+   ║     POOLS        — Pre-allocated object capacity                               ║
+   ║     VISUALS      — UI sizing, glow defaults, DPR cap                           ║
+   ║     AUDIO        — Master volume + per-SFX volumes                             ║
+   ║     INPUT        — Deadzones, joystick travel, touch zones                     ║
+   ║     FRAME        — Delta-time clamp                                            ║
+   ║     DEFAULTS     — Initial values for the user Settings menu                   ║
+   ║                                                                                ║
+   ║   For weapons / enemies / bosses / passives, see their dedicated arrays in     ║
+   ║   sections 8–10 below — they're separate so each entry can have its own       ║
+   ║   structure.                                                                   ║
+   ╚════════════════════════════════════════════════════════════════════════════════╝
+   ================================================================================= */
+const CONFIG = {
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // META — Identity displayed in the browser tab and start menu
+  // ════════════════════════════════════════════════════════════════════════════════
+  meta: {
+    title:   'Basic Survivors-Like HTML Game Template', // Also set in <title> tag
+    version: '1.0',                                     // Bump when you ship updates
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // RUN — How long a single run lasts. Survive this duration to win.
+  // ════════════════════════════════════════════════════════════════════════════════
+  run: {
+    duration: 900,    // Run length in seconds. 900 = 15 min. Try 300 for short demos.
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // PLAYER — Base character stats. Passive upgrades multiply these via *Mult fields.
+  // ════════════════════════════════════════════════════════════════════════════════
+  player: {
+    maxHp:              100,        // Starting maximum HP
+    speed:              220,        // Movement speed in pixels per second
+    radius:             14,         // Collision + render radius (also affects pickup distance)
+    pickupRadius:       80,         // XP gem magnet base range (pixels)
+    regenPerSec:        0,          // Base passive HP regen per second (Regen upgrade adds)
+    invulnAfterHit:     0.6,        // Seconds of i-frames after taking damage
+    blinkFrequencyMs:   60,         // i-frame visual blink rate (lower number = faster blink)
+    pulseSpeed:         0.005,      // Idle "breathing" animation speed
+    pulseAmount:        0.05,       // Idle pulse scale amount (0.05 = ±5%)
+    color:              '#4ade80',  // Player render color (also see CSS --accent)
+    facingDotDistance:  8,          // Distance from center to facing-direction dot (pixels)
+    facingDotRadius:    2,          // Radius of the facing-direction dot
+    startingWeaponId:   'pulse',    // ID of weapon player starts with (must match WEAPONS[].id)
+    maxWeapons:         6,          // How many distinct weapons player can hold
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // WORLD — Arena boundaries and the visual grid background
+  // ════════════════════════════════════════════════════════════════════════════════
+  world: {
+    bgColor:      '#0a0a14',  // Canvas clear color
+    gridColor:    '#1a1f33',  // Grid line color (subtle is best)
+    gridSize:     64,         // Grid spacing in pixels. Set to 0 to disable grid entirely.
+    arenaRadius:  4000,       // Soft world bound — player gets clamped at this distance from origin
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // CAMERA — Follow smoothness and screen-shake intensities
+  // ════════════════════════════════════════════════════════════════════════════════
+  camera: {
+    followSmoothness: 0.001,  // Camera lerp factor. LOWER = SNAPPIER (yes, lower).
+                              // 0.001 = quick follow; 0.1 = lazy/laggy follow.
+    shakeIntensity:   24,     // Pixel offset multiplier per unit of shake amount
+    shakeDecayPerSec: 1.5,    // How fast active shake decays toward 0
+    hurtShake:        0.25,   // Shake amount triggered when player takes damage
+    bossSpawnShake:   0.4,    // Shake amount when a boss appears
+    bossKillShake:    0.3,    // Shake amount when a boss dies
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // DIFFICULTY — How enemies scale over time + drop & knockback values
+  // ════════════════════════════════════════════════════════════════════════════════
+  difficulty: {
+    enemyHpScalePerSec: 1/120, // Enemy HP multiplier grows by this each second.
+                               //   1/120 = +50% HP per minute. Lower = easier.
+    bossDropCount:      6,     // How many XP gems a boss drops on death
+    normalDropCount:    1,     // How many XP gems a normal enemy drops on death
+    touchDamageRate:    2.5,   // Per-second multiplier for enemy contact damage.
+                               //   Effective dps = enemy.dmg * touchDamageRate.
+    contactKnockback:   180,   // Velocity given to an enemy on player contact
+    waveKnockback:      220,   // Velocity given to enemies hit by Pulse Wave
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // XP — Level-up curve.  XP needed for level N = base * N^growth
+  // ════════════════════════════════════════════════════════════════════════════════
+  xp: {
+    base:   6,    // Base multiplier. Lower = faster early levels.
+    growth: 1.32, // Exponent. 1.0 = linear. 1.5 = much steeper.
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // SPAWN — Enemy spawn pacing and timed boss/burst events
+  // ════════════════════════════════════════════════════════════════════════════════
+  spawn: {
+    initialDelay:       0.5,  // Seconds before first enemy spawns
+    intervalStart:      1.4,  // Seconds between spawns at run start
+    intervalMin:        0.18, // Minimum spawn interval at peak intensity
+    intervalDecayTime:  600,  // Seconds to interpolate from intervalStart to intervalMin
+    spawnRingFactor:    0.55, // Ring radius = screenDiagonal * this (where enemies appear)
+    spawnMargin:        80,   // Extra pixels added to spawn ring radius
+    burstAt:            [60, 180, 300, 480, 720], // Times (sec) to spawn a boss + burst
+    burstSize:          15,   // Bonus enemies spawned alongside each boss
+    extraSpawnChanceAfter120s: 0.25, // Chance per spawn-tick of +1 spawn after 2 min
+    extraSpawnChanceAfter300s: 0.30, // Chance per spawn-tick of +1 spawn after 5 min
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // GEMS — XP pickup visuals and magnet behavior
+  // ════════════════════════════════════════════════════════════════════════════════
+  gems: {
+    color:                '#fbbf24', // Render color (also see CSS --xp)
+    glowBlur:             12,        // Shadow-blur radius for gem glow
+    bobSpeed:             4,         // Vertical bob animation speed
+    bobAmount:            2,         // Vertical bob displacement (pixels)
+    popSpeedMin:          40,        // Min initial spawn velocity (px/sec)
+    popSpeedMax:          140,       // Max initial spawn velocity
+    drag:                 0.92,      // Velocity damping per frame (0..1)
+    magnetPullMin:        120,       // Pull speed at edge of magnet range
+    magnetPullMax:        700,       // Pull speed at very close range
+    magnetPullMultiplier: 6,         // Final acceleration multiplier
+    magnetRangeBoost:     1.2,       // Magnet starts at (player.pickupRadius * magnetMult * this)
+    pickupBuffer:         8,         // Pixels of pickup distance beyond player.radius
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // PARTICLES — FX defaults (overridable per call) and emit counts per event
+  // ════════════════════════════════════════════════════════════════════════════════
+  particles: {
+    defaultSpeedMin:        60,    // Default emit speed range
+    defaultSpeedMax:        200,
+    defaultLifeMin:         0.3,   // Default lifetime range (seconds)
+    defaultLifeMax:         0.7,
+    defaultSizeMin:         2,     // Default size range (pixels)
+    defaultSizeMax:         5,
+    defaultDrag:            0.92,  // Default velocity damping per frame
+    enemyDeathCount:        8,     // Particles emitted when normal enemy dies
+    bossDeathCount:         40,    // Particles emitted when boss dies
+    playerHurtCount:        12,    // Particles emitted when player takes damage
+    gemPickupCount:         4,     // Particles emitted on gem pickup
+    projectileHitCount:     4,     // Particles emitted on projectile impact
+    lowPerformanceMultiplier: 0.35, // When Performance=LOW, multiply emit counts by this
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // POOLS — Pre-allocated object pool sizes. Larger = more capacity, more memory.
+  //          For mobile, you can lower these to ~half if performance is tight.
+  // ════════════════════════════════════════════════════════════════════════════════
+  pools: {
+    enemies:           320,
+    projectiles:       240,
+    enemyProjectiles:  80,
+    particles:         400,
+    gems:              400,
+    dmgNumbers:        60,
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // VISUALS — UI sizing constants and rendering caps
+  // ════════════════════════════════════════════════════════════════════════════════
+  visuals: {
+    bossHpBarWidth:    120,  // Width of the HP bar drawn above bosses
+    bossHpBarHeight:   6,
+    bossHpBarOffset:   14,   // Pixels above the boss head
+    dmgNumberLifeMs:   800,  // How long damage numbers stay on screen (ms)
+    dprCap:            2,    // Max device pixel ratio. Higher = sharper but slower on retina.
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // AUDIO — Master volume default + individual SFX volumes (0..1).
+  //          Set any to 0 to mute that single sound.
+  // ════════════════════════════════════════════════════════════════════════════════
+  audio: {
+    masterVolumeDefault: 0.5,    // Default before user opens Settings
+    sfxVolumes: {
+      shoot:    0.07,            // Weapon fire
+      hit:      0.12,            // Generic hit (lightning chain etc.)
+      enemyDie: 0.15,            // Enemy death noise
+      pickup:   0.12,            // XP gem pickup
+      levelUp:  0.15,            // Level-up jingle
+      hurt:     0.20,            // Player takes damage
+      die:      0.25,            // Player dies
+      boss:     0.25,            // Boss appearance roar
+      upgrade:  0.15,            // Upgrade selected in level-up screen
+      explode:  0.30,            // Pulse Wave / explosions
+      win:      0.18,            // Victory jingle
+      click:    0.10,            // UI clicks
+    },
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // INPUT — Tuning knobs for keyboard / mouse / touch / gamepad
+  // ════════════════════════════════════════════════════════════════════════════════
+  input: {
+    gamepadDeadzone:       0.18, // Stick magnitude threshold (0..1)
+    stickTravelRatio:      0.42, // Joystick knob travel as fraction of joystick size
+    leftSideTouchZone:     0.6,  // When stickSide=left, touches in left X*fraction activate stick
+    rightSideTouchZone:    0.4,  // When stickSide=right, touches with X > screen*this activate
+    minDragPixels:         4,    // Pixels of drag before stick "activates"
+    facingUpdateThreshold: 0.05, // Movement magnitude required to update facing direction
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // FRAME — Main loop timing
+  // ════════════════════════════════════════════════════════════════════════════════
+  frame: {
+    maxDt: 0.05, // Max delta time clamp (seconds). Prevents huge jumps when tab is backgrounded.
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // DEFAULT SETTINGS — Initial values when player first opens the game.
+  //                    User can override these via the in-game Settings menu.
+  //                    Stored in localStorage under 'survivors_settings_v1'.
+  // ════════════════════════════════════════════════════════════════════════════════
+  defaultSettings: {
+    volume:        0.5,     // Master volume (0..1)
+    muted:         false,   // Hard mute toggle
+    stickSide:     'left',  // Touch joystick activation side: 'left' | 'right'
+    performance:   'high',  // 'high' | 'low' (low disables glows + reduces particles)
+    screenShake:   true,    // Toggle screen shake effect
+    damageNumbers: true,    // Toggle floating damage numbers
+  },
+
+};
+
+/* =================================================================================
+   END CONFIG. Everything below this line consumes CONFIG values — you generally
+   shouldn't need to edit anything outside the block above to retune the game.
+   ================================================================================= */
+
+/* =============================================================
+   SECTION 2 — UTILITIES
+   -------------------------------------------------------------
+   Math helpers, time formatter, tiny RNG wrappers. All pure
+   functions, no game state.
+   ============================================================= */
+const TAU = Math.PI * 2;
+const rand = (a,b)=>a+Math.random()*(b-a);
+const randi = (a,b)=>Math.floor(rand(a,b));
+const choice = arr=>arr[Math.floor(Math.random()*arr.length)];
+const clamp = (v,a,b)=>v<a?a:v>b?b:v;
+const lerp = (a,b,t)=>a+(b-a)*t;
+const dist2 = (a,b)=>{const dx=a.x-b.x,dy=a.y-b.y;return dx*dx+dy*dy};
+const hypot = (x,y)=>Math.sqrt(x*x+y*y);
+const fmtTime = s=>{s=Math.max(0,s|0);return `${String(s/60|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`};
+
+/* =============================================================
+   SECTION 3 — AUDIO  (procedural Web Audio, no external assets)
+   -------------------------------------------------------------
+   The Audio module exposes:
+     - init()                : creates the AudioContext (must run after a user gesture)
+     - SFX.<name>()          : plays a named procedural sound
+     - setVolume(0..1)       : master volume
+     - setMuted(bool)        : hard mute toggle
+     - getVolume() / isMuted(): readers
+
+   Sound design uses two primitives:
+     - tone()  : oscillator with envelope + optional pitch slide (best for blips/alarms)
+     - noise() : filtered white noise (best for impacts/whooshes)
+
+   Per-SFX volumes live in CONFIG.audio.sfxVolumes — tweak there, not here.
+   To swap procedural sounds for real samples, replace any function in `SFX`
+   below with playback of a preloaded AudioBuffer.
+   ============================================================= */
+const Audio = (() => {
+  let ctx, master;
+  let muted = false, started = false;
+  let pendingVolume = CONFIG.audio.masterVolumeDefault;
+
+  // Lazy init — must be called after a user gesture (autoplay policy)
+  function init(){
+    if(started) return;
+    started = true;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    master = ctx.createGain();
+    master.gain.value = pendingVolume;
+    master.connect(ctx.destination);
+  }
+  function setVolume(v){
+    pendingVolume = Math.max(0, Math.min(1, v));
+    if(master) master.gain.value = pendingVolume;
+  }
+  function getVolume(){ return pendingVolume }
+  function tone({freq=440,dur=0.1,type='square',vol=0.2,attack=0.005,release=0.05,slide=0,pan=0}){
+    if(!started||muted) return;
+    if(ctx.state==='suspended') ctx.resume();
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    const p=ctx.createStereoPanner?ctx.createStereoPanner():null;
+    o.type=type; o.frequency.value=freq;
+    if(slide) o.frequency.linearRampToValueAtTime(freq+slide,ctx.currentTime+dur);
+    g.gain.setValueAtTime(0,ctx.currentTime);
+    g.gain.linearRampToValueAtTime(vol,ctx.currentTime+attack);
+    g.gain.linearRampToValueAtTime(0,ctx.currentTime+dur+release);
+    o.connect(g);
+    if(p){p.pan.value=pan;g.connect(p);p.connect(master)} else g.connect(master);
+    o.start();o.stop(ctx.currentTime+dur+release+0.02);
+  }
+  function noise({dur=0.1,vol=0.2,freq=200,type='lowpass',q=2}){
+    if(!started||muted) return;
+    if(ctx.state==='suspended') ctx.resume();
+    const buf=ctx.createBuffer(1,ctx.sampleRate*dur,ctx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    const s=ctx.createBufferSource(); s.buffer=buf;
+    const f=ctx.createBiquadFilter(); f.type=type; f.frequency.value=freq; f.Q.value=q;
+    const g=ctx.createGain();
+    g.gain.setValueAtTime(vol,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
+    s.connect(f).connect(g).connect(master);
+    s.start();s.stop(ctx.currentTime+dur);
+  }
+  // Named SFX presets — extend or replace.
+  // Each function reads its volume from CONFIG.audio.sfxVolumes.<name>
+  // so you can tune mix balance from the master CONFIG block at the top.
+  const V = CONFIG.audio.sfxVolumes;
+  const SFX = {
+    shoot:    ()=>tone({freq:880,dur:0.04,type:'square',  vol:V.shoot,    slide:-300}),
+    hit:      ()=>tone({freq:220,dur:0.05,type:'sawtooth',vol:V.hit,      slide:-100}),
+    enemyDie: ()=>noise({dur:0.12,vol:V.enemyDie,freq:600}),
+    pickup:   ()=>tone({freq:1320,dur:0.06,type:'triangle',vol:V.pickup,  slide:600}),
+    levelUp:  ()=>{ tone({freq:660, dur:0.08,type:'square',vol:V.levelUp});
+                    setTimeout(()=>tone({freq:990, dur:0.10,type:'square',vol:V.levelUp}), 80);
+                    setTimeout(()=>tone({freq:1320,dur:0.12,type:'square',vol:V.levelUp}),180) },
+    hurt:     ()=>{ tone({freq:140,dur:0.18,type:'sawtooth',vol:V.hurt,slide:-60});
+                    noise({dur:0.15,vol:V.hurt*0.5,freq:300}) },
+    die:      ()=>{ tone({freq:200,dur:0.40,type:'sawtooth',vol:V.die,slide:-150}) },
+    boss:     ()=>{ noise({dur:0.4,vol:V.boss,freq:120,q:5});
+                    tone({freq:80,dur:0.4,type:'sawtooth',vol:V.boss*0.8}) },
+    upgrade:  ()=>{ tone({freq:880, dur:0.06,type:'triangle',vol:V.upgrade});
+                    setTimeout(()=>tone({freq:1320,dur:0.10,type:'triangle',vol:V.upgrade}),60) },
+    explode:  ()=>{ noise({dur:0.25,vol:V.explode,freq:200,q:3});
+                    tone({freq:60,dur:0.25,type:'sawtooth',vol:V.explode*0.67,slide:-30}) },
+    win:      ()=>{ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone({freq:f,dur:0.18,type:'square',vol:V.win}),i*120)) },
+    click:    ()=>tone({freq:660,dur:0.03,type:'square',vol:V.click}),
+  };
+  return {init, SFX, setMuted:m=>muted=m, isMuted:()=>muted, setVolume, getVolume};
+})();
+
+/* =============================================================
+   SECTION 4 — SETTINGS  (persisted to localStorage)
+   -------------------------------------------------------------
+   User-controllable preferences exposed via the in-game Settings
+   menu. Defaults are pulled from CONFIG.defaultSettings — change
+   them there, not here.
+
+   Storage key is versioned ('survivors_settings_v1') so future
+   updates can migrate without trashing user data.
+
+   Calling Settings.set(key, value) automatically persists AND
+   re-applies side effects (e.g. updating audio volume live).
+   ============================================================= */
+const Settings = (() => {
+  const KEY = 'survivors_settings_v1';
+  const defaults = {...CONFIG.defaultSettings};
+  let state = {...defaults};
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(raw){ state = {...defaults, ...JSON.parse(raw)} }
+    } catch(e){ /* localStorage unavailable — fall back to defaults */ }
+  }
+  function save(){
+    try{ localStorage.setItem(KEY, JSON.stringify(state)) } catch(e){}
+  }
+  function get(k){ return state[k] }
+  function set(k, v){
+    state[k] = v;
+    save();
+    apply();
+  }
+  function apply(){
+    Audio.setVolume(state.muted ? 0 : state.volume);
+    Audio.setMuted(state.muted);
+  }
+  function reset(){ state = {...defaults}; save(); apply() }
+
+  load();
+  return {get, set, apply, reset, defaults, getAll:()=>({...state})};
+})();
+// Apply initial settings now that Audio module exists
+Settings.apply();
+
+/* =============================================================
+   SECTION 5 — INPUT (keyboard + mouse + touch + gamepad)
+   -------------------------------------------------------------
+   Unified input layer. Game code only ever calls:
+     Input.getMoveVector()  -> {x,y,mag}     normalized 0..1
+     Input.consumeJustPressed(code)  -> bool one-shot key edge
+     Input.gpJust(idx)               -> bool one-shot gamepad button edge
+     Input.pollGamepad()             -> read gamepad state each frame
+     Input.endFrame()                -> clear one-shot flags
+
+   Touch joystick spawns wherever the player first taps on the
+   configured side of the screen (CONFIG.input.leftSideTouchZone /
+   rightSideTouchZone). It scales itself to the rendered size of
+   the #joystick element so it works on any screen size.
+   ============================================================= */
+const Input = (() => {
+  const keys = new Set();
+  const justPressed = new Set();
+  let mouse = {x:0, y:0, down:false};
+  let touchVec = {x:0, y:0, active:false};
+  let gp = {connected:false, lx:0, ly:0, btn:{}};
+
+  // Keyboard
+  addEventListener('keydown', e=>{
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+    if(!keys.has(e.code)) justPressed.add(e.code);
+    keys.add(e.code);
+  });
+  addEventListener('keyup', e=>{ keys.delete(e.code) });
+
+  // Mouse
+  addEventListener('mousemove', e=>{ mouse.x=e.clientX; mouse.y=e.clientY });
+  addEventListener('mousedown', e=>{ mouse.down=true });
+  addEventListener('mouseup',   e=>{ mouse.down=false });
+
+  // Touch joystick — appears wherever finger lands on left half, scales to screen
+  const stick = document.getElementById('joystick');
+  const knob  = document.getElementById('stickKnob');
+  let stickTouchId = null;          // which touch is driving the joystick
+  let stickStart = {x:0, y:0};
+  let stickRadius = 55;             // recomputed when joystick activates
+
+  function isTouchDevice(){ return 'ontouchstart' in window || navigator.maxTouchPoints>0 }
+
+  // External hook (kept for API compat)
+  function showJoystick(_show){ /* joystick now auto-shows on touch */ }
+
+  function activateJoystickAt(x, y){
+    // Position centered on touch point, scale knob travel to current size
+    const rect = stick.getBoundingClientRect();
+    // first set position, then read size (size from CSS clamp)
+    stick.style.left = '0px'; stick.style.top = '0px';
+    stick.style.bottom = 'auto'; stick.style.right = 'auto';
+    stick.classList.add('active');
+    // After making visible, get its actual size
+    const size = stick.offsetWidth || 120;
+    stickRadius = size * CONFIG.input.stickTravelRatio; // travel limit
+    stick.style.left = (x - size/2) + 'px';
+    stick.style.top  = (y - size/2) + 'px';
+    stickStart = {x, y};
+    knob.style.transform = 'translate(-50%,-50%)';
+  }
+  function deactivateJoystick(){
+    stickTouchId = null;
+    touchVec.active = false;
+    touchVec.x = touchVec.y = 0;
+    stick.classList.remove('active');
+    knob.style.transform = 'translate(-50%,-50%)';
+  }
+
+  function touchOnInteractive(t){
+    // Don't hijack touches on UI buttons / overlays
+    return !!(t.target && t.target.closest && t.target.closest('button, .upgrade-card, .overlay'));
+  }
+
+  addEventListener('touchstart', e=>{
+    // Only spawn joystick if no stick touch yet, and finger is on the configured side
+    if(stickTouchId === null){
+      const side = Settings.get('stickSide'); // 'left' | 'right'
+      for(const t of e.changedTouches){
+        if(touchOnInteractive(t)) continue;
+        const onCorrectSide = side === 'left'
+          ? t.clientX < innerWidth * CONFIG.input.leftSideTouchZone
+          : t.clientX > innerWidth * CONFIG.input.rightSideTouchZone;
+        if(onCorrectSide){
+          stickTouchId = t.identifier;
+          activateJoystickAt(t.clientX, t.clientY);
+          touchVec.active = true;
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  }, {passive:false});
+
+  addEventListener('touchmove', e=>{
+    if(stickTouchId === null) return;
+    for(const t of e.changedTouches){
+      if(t.identifier !== stickTouchId) continue;
+      const dx = t.clientX - stickStart.x;
+      const dy = t.clientY - stickStart.y;
+      const d  = Math.hypot(dx, dy);
+      const cx = d>stickRadius ? dx*stickRadius/d : dx;
+      const cy = d>stickRadius ? dy*stickRadius/d : dy;
+      knob.style.transform = `translate(calc(-50% + ${cx}px), calc(-50% + ${cy}px))`;
+      touchVec.x = cx/stickRadius;
+      touchVec.y = cy/stickRadius;
+      touchVec.active = d > CONFIG.input.minDragPixels;
+      e.preventDefault();
+      break;
+    }
+  }, {passive:false});
+
+  function touchEndHandler(e){
+    for(const t of e.changedTouches){
+      if(t.identifier === stickTouchId){
+        deactivateJoystick();
+        break;
+      }
+    }
+  }
+  addEventListener('touchend', touchEndHandler);
+  addEventListener('touchcancel', touchEndHandler);
+
+  // Gamepad
+  addEventListener('gamepadconnected', e=>{ gp.connected=true });
+  addEventListener('gamepaddisconnected', e=>{ gp.connected=false });
+
+  function pollGamepad(){
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let pad=null;
+    for(const p of pads) if(p && p.connected){ pad=p; break }
+    if(!pad){ gp.connected=false; gp.lx=gp.ly=0; return }
+    gp.connected=true;
+    const dz = CONFIG.input.gamepadDeadzone;
+    const lx = pad.axes[0]||0, ly = pad.axes[1]||0;
+    gp.lx = Math.abs(lx)<dz ? 0 : lx;
+    gp.ly = Math.abs(ly)<dz ? 0 : ly;
+    const newBtn={};
+    for(let i=0;i<pad.buttons.length;i++){
+      const pressed = pad.buttons[i].pressed;
+      newBtn[i] = pressed;
+      if(pressed && !gp.btn[i]) gp.btn['just_'+i] = true;
+    }
+    // copy state, keep "just" flags for one frame
+    for(const k in gp.btn) if(!k.startsWith('just_') && !(k in newBtn)) delete gp.btn[k];
+    Object.assign(gp.btn, newBtn);
+  }
+
+  function consumeJustPressed(code){
+    if(justPressed.has(code)){ justPressed.delete(code); return true }
+    return false;
+  }
+  function gpJust(idx){
+    const k='just_'+idx;
+    if(gp.btn[k]){ delete gp.btn[k]; return true }
+    return false;
+  }
+
+  function getMoveVector(){
+    let x=0,y=0;
+    if(keys.has('KeyW')||keys.has('ArrowUp')) y-=1;
+    if(keys.has('KeyS')||keys.has('ArrowDown')) y+=1;
+    if(keys.has('KeyA')||keys.has('ArrowLeft')) x-=1;
+    if(keys.has('KeyD')||keys.has('ArrowRight')) x+=1;
+    if(touchVec.active){ x=touchVec.x; y=touchVec.y }
+    if(gp.connected && (Math.abs(gp.lx)>0||Math.abs(gp.ly)>0)){ x=gp.lx; y=gp.ly }
+    const m=Math.hypot(x,y);
+    if(m>1){ x/=m; y/=m }
+    return {x,y,mag:Math.min(1,m)};
+  }
+
+  function endFrame(){ justPressed.clear() }
+
+  return {keys, mouse, touchVec, gp,
+          getMoveVector, pollGamepad, consumeJustPressed, gpJust,
+          showJoystick, isTouchDevice, endFrame};
+})();
+
+/* =============================================================
+   SECTION 6 — OBJECT POOL
+   -------------------------------------------------------------
+   Generic pre-allocated pool. Keeps GC pressure low by reusing
+   objects instead of allocating new ones every frame.
+
+   Usage:
+     const pool = new Pool(factoryFn, size);
+     const obj  = pool.spawn();         // marks obj.alive = true
+     pool.forEachAlive(obj => { ... }); // iterate live items
+     pool.killAll();                    // reset everything to dead
+   ============================================================= */
+class Pool {
+  constructor(factory, size){
+    this.items = new Array(size);
+    for(let i=0;i<size;i++){ const o=factory(); o.alive=false; this.items[i]=o }
+  }
+  spawn(){
+    for(const o of this.items) if(!o.alive){ o.alive=true; return o }
+    return null;
+  }
+  forEachAlive(fn){
+    for(const o of this.items) if(o.alive) fn(o);
+  }
+  countAlive(){
+    let n=0; for(const o of this.items) if(o.alive) n++;
+    return n;
+  }
+  killAll(){ for(const o of this.items) o.alive=false }
+}
+
+/* =============================================================
+   SECTION 7 — PARTICLES
+   -------------------------------------------------------------
+   Lightweight particle system used for impact, death, and pickup
+   FX. All particles drawn in a single canvas pass for performance.
+
+   Defaults (speed, life, size, drag) come from CONFIG.particles —
+   any can be overridden per emitParticles() call.
+   ============================================================= */
+function makeParticle(){
+  return {x:0, y:0, vx:0, vy:0, life:0, maxLife:1,
+          color:'#fff', size:3, fade:1, glow:false,
+          gravity:0, drag:CONFIG.particles.defaultDrag};
+}
+const particles = new Pool(makeParticle, CONFIG.pools.particles);
+
+function emitParticles(x, y, n, opts={}){
+  // When Performance setting is LOW, scale down the count to save GPU/CPU
+  if(Settings.get('performance')==='low'){
+    n = Math.max(1, Math.ceil(n * CONFIG.particles.lowPerformanceMultiplier));
+  }
+  const P = CONFIG.particles;
+  for(let i=0;i<n;i++){
+    const p = particles.spawn();
+    if(!p) return; // pool exhausted — bail rather than block
+    const a = rand(0, TAU);
+    const s = rand(opts.speed?.[0] ?? P.defaultSpeedMin, opts.speed?.[1] ?? P.defaultSpeedMax);
+    p.x = x; p.y = y;
+    p.vx = Math.cos(a)*s; p.vy = Math.sin(a)*s;
+    p.life = p.maxLife = rand(opts.life?.[0] ?? P.defaultLifeMin, opts.life?.[1] ?? P.defaultLifeMax);
+    p.color = opts.color || '#fff';
+    p.size = rand(opts.size?.[0] ?? P.defaultSizeMin, opts.size?.[1] ?? P.defaultSizeMax);
+    p.fade = opts.fade ?? 1;
+    p.glow = opts.glow || false;
+    p.gravity = opts.gravity || 0;
+    p.drag = opts.drag ?? P.defaultDrag;
+  }
+}
+
+function updateParticles(dt){
+  particles.forEachAlive(p=>{
+    p.life -= dt;
+    if(p.life<=0){ p.alive=false; return }
+    p.x += p.vx*dt; p.y += p.vy*dt;
+    p.vy += p.gravity*dt;
+    p.vx *= p.drag; p.vy *= p.drag;
+  });
+}
+
+/* =============================================================
+   SECTION 8 — DAMAGE NUMBERS
+   -------------------------------------------------------------
+   Floating combat-text numbers shown when enemies take damage.
+   Implemented as DOM elements (not canvas) so they can use CSS
+   animations cheaply. Lifetime/styling controlled by CSS .dmg-num
+   keyframes; max count and duration come from CONFIG.
+   ============================================================= */
+const dmgNumbers = [];
+function showDamage(x,y,amount,crit){
+  if(!Settings.get('damageNumbers')) return;
+  if(dmgNumbers.length>=CONFIG.pools.dmgNumbers) dmgNumbers.shift();
+  const el=document.createElement('div');
+  el.className='dmg-num'+(crit?' crit':'');
+  el.textContent=Math.round(amount);
+  el.style.left=x+'px'; el.style.top=y+'px';
+  el.style.transform='translate(-50%,0)';
+  document.body.appendChild(el);
+  dmgNumbers.push({el, expires:performance.now() + CONFIG.visuals.dmgNumberLifeMs});
+}
+function pruneDamage(){
+  const now=performance.now();
+  while(dmgNumbers.length && dmgNumbers[0].expires<now){
+    dmgNumbers.shift().el.remove();
+  }
+}
+
+/* =============================================================
+   SECTION 9 — WEAPONS
+   -------------------------------------------------------------
+   Each weapon definition is a flat object. To add a weapon:
+     1. Append a new entry to the WEAPONS array
+     2. Give it a unique `id`
+     3. Provide `levels[]` with the per-level stats
+     4. Implement `onFire(p, game, L)` — called each cooldown tick
+        - p     : player object
+        - game  : the Game instance (for spawning projectiles)
+        - L     : the current level's stats object
+
+   Special weapons (like Orbitals) override `cooldown()` to return
+   Infinity and instead implement their own per-frame update logic
+   in Game.updateOrbitals() / similar.
+
+   To add a weapon: add an entry, define onFire(player,game)
+   ============================================================= */
+const WEAPONS = [
+  {
+    id:'pulse', name:'PULSE PISTOL', icon:'◆',
+    desc:'Auto-fires at nearest foe.',
+    levels:[
+      {cooldown:0.55, dmg:8,  speed:520, count:1, pierce:0, color:'#4ade80'},
+      {cooldown:0.50, dmg:10, speed:540, count:1, pierce:0, color:'#4ade80'},
+      {cooldown:0.45, dmg:13, speed:560, count:1, pierce:1, color:'#4ade80'},
+      {cooldown:0.40, dmg:16, speed:580, count:2, pierce:1, color:'#4ade80'},
+      {cooldown:0.35, dmg:20, speed:620, count:2, pierce:2, color:'#4ade80'},
+    ],
+    onFire(p,game,L){
+      const target = game.findNearestEnemy(p.x,p.y, 700);
+      if(!target) return;
+      for(let i=0;i<L.count;i++){
+        const a = Math.atan2(target.y-p.y, target.x-p.x) + (i-(L.count-1)/2)*0.10;
+        game.spawnProjectile(p.x,p.y, Math.cos(a)*L.speed, Math.sin(a)*L.speed,
+          L.dmg*p.dmgMult, L.color, 4, L.pierce, 1.4);
+      }
+      Audio.SFX.shoot();
+    }
+  },
+  {
+    id:'spread', name:'SPREAD CANNON', icon:'⋙',
+    desc:'Fires a fan of shots.',
+    levels:[
+      {cooldown:1.4, dmg:6,  speed:480, count:3, spread:0.45, pierce:0, color:'#22d3ee'},
+      {cooldown:1.3, dmg:7,  speed:480, count:4, spread:0.55, pierce:0, color:'#22d3ee'},
+      {cooldown:1.2, dmg:9,  speed:500, count:5, spread:0.65, pierce:1, color:'#22d3ee'},
+      {cooldown:1.1, dmg:11, speed:520, count:6, spread:0.75, pierce:1, color:'#22d3ee'},
+      {cooldown:1.0, dmg:14, speed:540, count:7, spread:0.85, pierce:2, color:'#22d3ee'},
+    ],
+    onFire(p,game,L){
+      const target = game.findNearestEnemy(p.x,p.y, 800) || {x:p.x+p.facing.x, y:p.y+p.facing.y};
+      const base = Math.atan2(target.y-p.y, target.x-p.x);
+      for(let i=0;i<L.count;i++){
+        const a = base + (i-(L.count-1)/2)*(L.spread/(L.count-1||1));
+        game.spawnProjectile(p.x,p.y, Math.cos(a)*L.speed, Math.sin(a)*L.speed,
+          L.dmg*p.dmgMult, L.color, 4, L.pierce, 1.2);
+      }
+      Audio.SFX.shoot();
+    }
+  },
+  {
+    id:'orbit', name:'ORBITALS', icon:'◌',
+    desc:'Satellites circle you.',
+    levels:[
+      {count:1, dmg:7,  radius:70,  spin:2.0, size:8},
+      {count:2, dmg:8,  radius:75,  spin:2.2, size:8},
+      {count:3, dmg:10, radius:85,  spin:2.4, size:9},
+      {count:4, dmg:12, radius:95,  spin:2.6, size:10},
+      {count:5, dmg:15, radius:110, spin:2.8, size:11},
+    ],
+    // Orbitals are special: maintained as part of player, not normal projectiles
+    onFire(){ /* handled in updatePlayerOrbitals */ },
+    cooldown(){ return 999 } // never auto-fires
+  },
+  {
+    id:'wave', name:'PULSE WAVE', icon:'◎',
+    desc:'Expanding shockwave.',
+    levels:[
+      {cooldown:3.5, dmg:14, radius:140, color:'#fbbf24'},
+      {cooldown:3.2, dmg:18, radius:160, color:'#fbbf24'},
+      {cooldown:3.0, dmg:22, radius:185, color:'#fbbf24'},
+      {cooldown:2.7, dmg:28, radius:215, color:'#fbbf24'},
+      {cooldown:2.4, dmg:36, radius:250, color:'#fbbf24'},
+    ],
+    onFire(p,game,L){
+      game.spawnWave(p.x,p.y, L.radius, L.dmg*p.dmgMult, L.color);
+      Audio.SFX.explode();
+    }
+  },
+  {
+    id:'bolt', name:'CHAIN BOLT', icon:'⚡',
+    desc:'Lightning that arcs to nearby foes.',
+    levels:[
+      {cooldown:1.1, dmg:9,  chains:1, range:180, color:'#a78bfa'},
+      {cooldown:1.0, dmg:11, chains:2, range:200, color:'#a78bfa'},
+      {cooldown:0.9, dmg:14, chains:3, range:220, color:'#a78bfa'},
+      {cooldown:0.8, dmg:18, chains:4, range:240, color:'#a78bfa'},
+      {cooldown:0.7, dmg:24, chains:5, range:260, color:'#a78bfa'},
+    ],
+    onFire(p,game,L){
+      const first = game.findNearestEnemy(p.x,p.y, 500);
+      if(!first) return;
+      const hit=new Set();
+      let from={x:p.x,y:p.y};
+      let cur=first;
+      for(let i=0;i<=L.chains;i++){
+        if(!cur || hit.has(cur)) break;
+        hit.add(cur);
+        game.spawnLightning(from.x,from.y, cur.x,cur.y, L.color);
+        game.damageEnemy(cur, L.dmg*p.dmgMult, false);
+        from={x:cur.x,y:cur.y};
+        // find next nearest unhit
+        let next=null, nd=L.range*L.range;
+        game.enemies.forEachAlive(e=>{
+          if(hit.has(e)) return;
+          const d=dist2(from,e);
+          if(d<nd){ nd=d; next=e }
+        });
+        cur=next;
+      }
+      Audio.SFX.hit();
+    }
+  },
+];
+
+/* =============================================================
+   SECTION 10 — UPGRADES (PASSIVES)
+   -------------------------------------------------------------
+   Stat-modifying choices offered alongside weapon picks at level-up.
+   Each passive defines:
+     - id          : unique key (also used as the stack-tracker key)
+     - name/desc   : shown on the level-up card
+     - icon        : single character or emoji
+     - maxStacks   : how many times this can be picked in one run
+     - apply(p)    : runs once per stack, mutates the player object
+
+   Stack tracking is handled by Game.applyUpgrade() — you don't need
+   to manage stack counts inside apply().
+   ============================================================= */
+const PASSIVES = [
+  {id:'maxhp',  name:'VITALITY',     icon:'❤', desc:'+20 Max HP',          maxStacks:5,
+    apply(p){ p.maxHp+=20; p.hp=Math.min(p.maxHp,p.hp+20) }},
+  {id:'speed',  name:'SWIFTNESS',    icon:'➤', desc:'+10% Move Speed',     maxStacks:5,
+    apply(p){ p.speedMult*=1.10 }},
+  {id:'magnet', name:'MAGNETISM',    icon:'◉', desc:'+30% Pickup Radius',  maxStacks:5,
+    apply(p){ p.magnetMult*=1.30 }},
+  {id:'damage', name:'POWER',        icon:'✦', desc:'+15% Damage',         maxStacks:5,
+    apply(p){ p.dmgMult*=1.15 }},
+  {id:'rate',   name:'HASTE',        icon:'⏱', desc:'-10% Cooldowns',      maxStacks:5,
+    apply(p){ p.cdMult*=0.90 }},
+  {id:'regen',  name:'REGENERATION', icon:'＋', desc:'+0.5 HP/sec',         maxStacks:4,
+    apply(p){ p.regen+=0.5 }},
+  {id:'armor',  name:'ARMOR',        icon:'⛨', desc:'-1 Damage Taken',     maxStacks:4,
+    apply(p){ p.armor+=1 }},
+  {id:'xp',     name:'WISDOM',       icon:'★', desc:'+15% XP Gain',        maxStacks:4,
+    apply(p){ p.xpMult*=1.15 }},
+];
+
+/* =============================================================
+   SECTION 11 — ENEMIES & BOSSES
+   -------------------------------------------------------------
+   ENEMY_TYPES — regular spawn pool. Each entry has:
+     - id         : unique key
+     - hp/dmg     : base stats (multiplied by run-time scaling)
+     - speed      : pixels/sec movement
+     - radius     : collision/render size
+     - color      : render color
+     - xp         : XP value granted on death
+     - weight     : spawn weight (higher = more common)
+     - minTime    : seconds elapsed before this type can appear
+     - behavior   : 'chase' (always run at player) or 'shooter'
+                    (keep distance + fire projectiles)
+     - shootCD/Speed/Dmg : (shooter only) firing stats
+
+   BOSSES — spawned at CONFIG.spawn.burstAt timestamps in order.
+   Defined the same way but typically much higher hp/xp.
+   Stats scale with elapsed time inside spawnEnemy() via
+   CONFIG.difficulty.enemyHpScalePerSec.
+   ============================================================= */
+const ENEMY_TYPES = [
+  // Grunt — basic chaser
+  {id:'grunt',  hp:14, dmg:8,  speed:80,  radius:13, color:'#f87171', xp:1, weight:60, behavior:'chase'},
+  // Sprinter — fast, fragile
+  {id:'sprint', hp:8,  dmg:6,  speed:140, radius:10, color:'#fbbf24', xp:1, weight:30, minTime:30, behavior:'chase'},
+  // Brute — slow, tough
+  {id:'brute',  hp:50, dmg:14, speed:55,  radius:18, color:'#fb7185', xp:3, weight:18, minTime:90,  behavior:'chase'},
+  // Shooter — keeps distance, fires
+  {id:'shoot',  hp:18, dmg:10, speed:70,  radius:12, color:'#a78bfa', xp:2, weight:18, minTime:60,  behavior:'shooter', shootCD:1.6, shotSpeed:200, shotDmg:10},
+  // Swarmer — comes in groups
+  {id:'swarm',  hp:6,  dmg:5,  speed:110, radius:8,  color:'#fda4af', xp:1, weight:25, minTime:120, behavior:'chase'},
+];
+
+const BOSSES = [
+  {id:'boss1', hp:600,  dmg:18, speed:60,  radius:32, color:'#ef4444', xp:25, behavior:'chase'},
+  {id:'boss2', hp:1500, dmg:24, speed:55,  radius:38, color:'#a855f7', xp:40, behavior:'shooter', shootCD:1.0, shotSpeed:240, shotDmg:14},
+  {id:'boss3', hp:3000, dmg:30, speed:70,  radius:42, color:'#f43f5e', xp:60, behavior:'chase'},
+];
+
+/* =============================================================
+   SECTION 12 — GAME (main class)
+   -------------------------------------------------------------
+   Owns all runtime state, pools, and the main update/draw loop.
+
+   State machine: this.state ∈ {
+     'MENU'      — main menu visible, no simulation
+     'PLAYING'   — normal gameplay
+     'LEVEL_UP'  — paused, upgrade picker visible
+     'PAUSED'    — paused via pause menu
+     'GAME_OVER' — death screen visible
+     'VICTORY'   — won (survived CONFIG.run.duration)
+   }
+
+   Update order each frame (state==='PLAYING'):
+     1. Decay camera shake
+     2. Player input + movement + weapon auto-fire
+     3. Enemy spawning
+     4. Enemies (movement, AI, contact damage)
+     5. Player projectiles vs enemies
+     6. Enemy projectiles vs player
+     7. AOE waves vs enemies
+     8. Lightning chain FX timers
+     9. Gems (magnet + pickup)
+    10. Particles
+    11. Camera follow lerp
+   ============================================================= */
+class Game {
+  constructor(){
+    this.canvas = document.getElementById('game');
+    this.ctx = this.canvas.getContext('2d');
+    this.resize();
+    addEventListener('resize', ()=>this.resize());
+    addEventListener('orientationchange', ()=>setTimeout(()=>this.resize(), 100));
+    if(window.visualViewport) visualViewport.addEventListener('resize', ()=>this.resize());
+
+    // Pools
+    this.enemies     = new Pool(()=>this.makeEnemy(),     CONFIG.pools.enemies);
+    this.projectiles = new Pool(()=>this.makeProjectile(),CONFIG.pools.projectiles);
+    this.eProjectiles= new Pool(()=>this.makeProjectile(),CONFIG.pools.enemyProjectiles);
+    this.gems        = new Pool(()=>this.makeGem(),       CONFIG.pools.gems);
+    this.waves       = []; // pulse-wave AOE expanding circles
+    this.lightnings  = []; // line FX
+
+    this.player = this.makePlayer();
+    this.cam = {x:0,y:0,shake:0};
+    this.state = 'MENU'; // MENU | PLAYING | LEVEL_UP | PAUSED | GAME_OVER | VICTORY
+    this.elapsed = 0;
+    this.kills = 0;
+    this.spawnTimer = CONFIG.spawn.initialDelay;
+    this.spawnInterval = CONFIG.spawn.intervalStart;
+    this.bossTriggered = new Set();
+
+    this.menuFocus = 0;
+    this.upgradeFocus = 0;
+    this.settingsFocus = 0;
+    this.menuButtons = [];
+    this.upgradeButtons = [];
+    this.settingsRows = [];
+
+    this._weaponSlots = []; // DOM cache
+  }
+
+  resize(){
+    // Cap device pixel ratio so high-DPI screens don't tank perf.
+    // Tweak via CONFIG.visuals.dprCap (lower = faster, blurrier).
+    const dpr = Math.min(devicePixelRatio||1, CONFIG.visuals.dprCap);
+    this.canvas.width  = Math.floor(innerWidth  * dpr);
+    this.canvas.height = Math.floor(innerHeight * dpr);
+    this.canvas.style.width  = innerWidth  + 'px';
+    this.canvas.style.height = innerHeight + 'px';
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.W = innerWidth; this.H = innerHeight;
+  }
+
+  /* ---------- factories ---------- */
+  makePlayer(){
+    return {
+      x:0, y:0, vx:0, vy:0,
+      facing:{x:1,y:0},
+      hp:CONFIG.player.maxHp, maxHp:CONFIG.player.maxHp,
+      level:1, xp:0, xpToNext: this.xpForLevel(2),
+      speed:CONFIG.player.speed, speedMult:1,
+      pickupRadius:CONFIG.player.pickupRadius, magnetMult:1,
+      dmgMult:1, cdMult:1, xpMult:1,
+      regen:CONFIG.player.regenPerSec, armor:0,
+      iframe:0,
+      // unlocked weapons: [{def, level, cooldown}]
+      weapons:[],
+      // orbital state
+      orbitTheta:0,
+      // visuals
+      radius: CONFIG.player.radius,
+      color:  CONFIG.player.color,
+      pickedUpgrades: {}, // id -> stacks (used to enforce maxStacks per passive)
+    };
+  }
+  makeEnemy(){
+    return {alive:false,x:0,y:0,vx:0,vy:0,hp:0,maxHp:0,dmg:0,speed:0,radius:0,color:'#fff',xp:0,
+            type:null,boss:false,shootCD:0,shootRate:0,shotSpeed:0,shotDmg:0,behavior:'chase',
+            hitFlash:0, knockX:0, knockY:0};
+  }
+  makeProjectile(){
+    return {alive:false,x:0,y:0,vx:0,vy:0,dmg:0,life:0,maxLife:0,radius:4,color:'#fff',pierce:0,hitSet:null};
+  }
+  makeGem(){
+    return {alive:false,x:0,y:0,vx:0,vy:0,value:0,bobT:0};
+  }
+
+  /* ---------- weapon mgmt ---------- */
+  ownsWeapon(id){ return this.player.weapons.some(w=>w.def.id===id) }
+  addWeapon(def){
+    const w = {def, level:0, cooldown:def.levels?def.levels[0].cooldown:1, timer:0.4};
+    this.player.weapons.push(w);
+    this.refreshWeaponBar();
+  }
+  upgradeWeapon(id){
+    const w = this.player.weapons.find(w=>w.def.id===id);
+    if(!w) return;
+    if(w.def.levels){
+      w.level = Math.min(w.def.levels.length-1, w.level+1);
+    } else {
+      w.level += 1;
+    }
+    this.refreshWeaponBar();
+  }
+
+  refreshWeaponBar(){
+    const bar = document.getElementById('weaponBar');
+    bar.innerHTML='';
+    for(const w of this.player.weapons){
+      const slot=document.createElement('div');
+      slot.className='weapon-slot';
+      slot.innerHTML=`<span class="icon" style="color:${w.def.levels?w.def.levels[0].color||'#4ade80':'#4ade80'}">${w.def.icon}</span><span class="lvl">${w.level+1}</span>`;
+      slot.title = w.def.name;
+      bar.appendChild(slot);
+    }
+  }
+
+  /* ---------- xp & level ---------- */
+  xpForLevel(lvl){ return Math.round(CONFIG.xp.base * Math.pow(lvl, CONFIG.xp.growth)) }
+  giveXP(amt){
+    const p=this.player;
+    p.xp += amt * p.xpMult;
+    while(p.xp >= p.xpToNext){
+      p.xp -= p.xpToNext;
+      p.level += 1;
+      p.xpToNext = this.xpForLevel(p.level+1);
+      this.queueLevelUp();
+    }
+  }
+  queueLevelUp(){
+    if(this.state==='LEVEL_UP'){
+      // queue another by stacking; for simplicity show now if nothing pending
+      this._pendingLevelUps = (this._pendingLevelUps||0)+1;
+      return;
+    }
+    this.showLevelUp();
+  }
+
+  /* ---------- spawning ---------- */
+  spawnEnemy(typeOverride){
+    const e = this.enemies.spawn();
+    if(!e) return null;
+    // Spawn just outside the visible ring around the player so enemies appear to "stream in"
+    const margin = CONFIG.spawn.spawnMargin;
+    const w=this.W, h=this.H;
+    const radius = Math.hypot(w,h) * CONFIG.spawn.spawnRingFactor + margin;
+    const a = rand(0,TAU);
+    e.x = this.player.x + Math.cos(a)*radius;
+    e.y = this.player.y + Math.sin(a)*radius;
+
+    let t = typeOverride;
+    if(!t){
+      // Pick a type by weight, filtered by minimum elapsed time gates
+      const pool = ENEMY_TYPES.filter(et=>this.elapsed >= (et.minTime||0));
+      const total = pool.reduce((s,x)=>s+x.weight,0);
+      let r = Math.random()*total;
+      for(const et of pool){ r -= et.weight; if(r<=0){ t=et; break } }
+      if(!t) t = pool[0];
+    }
+    // Time-based difficulty scaling: enemies grow tougher as the run progresses.
+    // Tune with CONFIG.difficulty.enemyHpScalePerSec (rate of growth per second).
+    const k = 1 + this.elapsed * CONFIG.difficulty.enemyHpScalePerSec;
+    e.type = t.id;
+    e.boss = !!t.boss;
+    e.maxHp = e.hp = Math.round(t.hp * k);
+    e.dmg = t.dmg;
+    e.speed = t.speed;
+    e.radius = t.radius;
+    e.color = t.color;
+    e.xp = t.xp;
+    e.behavior = t.behavior;
+    e.shootRate = t.shootCD||0;
+    e.shootCD = e.shootRate * (0.5+Math.random()*0.5);
+    e.shotSpeed = t.shotSpeed||0;
+    e.shotDmg = t.shotDmg||0;
+    e.vx=e.vy=0; e.hitFlash=0; e.knockX=e.knockY=0;
+    return e;
+  }
+
+  spawnBoss(idx){
+    const t = BOSSES[idx % BOSSES.length];
+    const e = this.spawnEnemy({...t});
+    if(e){ e.boss=true; e.maxHp=e.hp=t.hp; e.color=t.color; e.radius=t.radius }
+    Audio.SFX.boss();
+    this.cam.shake = CONFIG.camera.bossSpawnShake;
+    return e;
+  }
+
+  spawnBurst(n){
+    for(let i=0;i<n;i++) this.spawnEnemy();
+  }
+
+  /* ---------- projectile spawn ---------- */
+  spawnProjectile(x,y,vx,vy,dmg,color,radius,pierce,life){
+    const p = this.projectiles.spawn();
+    if(!p) return;
+    p.x=x;p.y=y;p.vx=vx;p.vy=vy;p.dmg=dmg;p.color=color;p.radius=radius||4;p.pierce=pierce||0;
+    p.life=p.maxLife=life||1.2; p.hitSet=new Set();
+  }
+  spawnEnemyProjectile(x,y,vx,vy,dmg){
+    const p = this.eProjectiles.spawn();
+    if(!p) return;
+    p.x=x;p.y=y;p.vx=vx;p.vy=vy;p.dmg=dmg;p.color='#fb7185';p.radius=5;p.pierce=0;
+    p.life=p.maxLife=4; p.hitSet=null;
+  }
+  spawnWave(x,y,maxR,dmg,color){
+    this.waves.push({x,y,r:0,maxR,dmg,color,life:0.5,maxLife:0.5,hit:new Set()});
+  }
+  spawnLightning(x1,y1,x2,y2,color){
+    this.lightnings.push({x1,y1,x2,y2,color,life:0.18,maxLife:0.18});
+  }
+
+  /* ---------- helpers ---------- */
+  findNearestEnemy(x,y,maxR){
+    let best=null, bd = maxR?maxR*maxR:Infinity;
+    this.enemies.forEachAlive(e=>{
+      const d = (e.x-x)*(e.x-x)+(e.y-y)*(e.y-y);
+      if(d<bd){ bd=d; best=e }
+    });
+    return best;
+  }
+  damageEnemy(e, dmg, crit){
+    e.hp -= dmg;
+    e.hitFlash = 0.12;
+    showDamage(e.x - this.cam.x + this.W/2, e.y - this.cam.y + this.H/2, dmg, crit);
+    if(e.hp<=0){
+      this.killEnemy(e);
+    }
+  }
+  killEnemy(e){
+    if(!e.alive) return;
+    Audio.SFX.enemyDie();
+    // Death particle burst — bosses get a much bigger plume
+    emitParticles(e.x, e.y,
+      e.boss ? CONFIG.particles.bossDeathCount : CONFIG.particles.enemyDeathCount,
+      {color:e.color, speed:[80,260], life:[0.3,0.8], size:[2,5]});
+    // Drop XP gem(s) — bosses drop multiple
+    const drops = e.boss ? CONFIG.difficulty.bossDropCount : CONFIG.difficulty.normalDropCount;
+    for(let i=0;i<drops;i++){
+      const g = this.gems.spawn();
+      if(!g) break; // gem pool full
+      const a=rand(0,TAU), s=rand(CONFIG.gems.popSpeedMin, CONFIG.gems.popSpeedMax);
+      g.x=e.x; g.y=e.y; g.vx=Math.cos(a)*s; g.vy=Math.sin(a)*s;
+      g.value = e.xp; g.bobT=rand(0,TAU);
+    }
+    e.alive=false;
+    this.kills++;
+    if(e.boss) this.cam.shake = Math.max(this.cam.shake, CONFIG.camera.bossKillShake);
+  }
+
+  damagePlayer(amt){
+    const p=this.player;
+    if(p.iframe>0) return; // i-frames active, ignore damage
+    const final = Math.max(1, amt - p.armor);
+    p.hp -= final;
+    p.iframe = CONFIG.player.invulnAfterHit;
+    Audio.SFX.hurt();
+    this.cam.shake = Math.max(this.cam.shake, CONFIG.camera.hurtShake);
+    emitParticles(p.x, p.y, CONFIG.particles.playerHurtCount,
+      {color:'#f87171', speed:[80,180], life:[0.2,0.5]});
+    if(p.hp<=0){ p.hp=0; this.gameOver(false) }
+  }
+
+  /* ---------- main update ---------- */
+  update(dt){
+    if(this.state!=='PLAYING') return;
+    this.elapsed += dt;
+
+    // Win condition
+    if(this.elapsed >= CONFIG.run.duration){ this.gameOver(true); return }
+
+    // Camera shake decay (rate set by CONFIG.camera.shakeDecayPerSec)
+    this.cam.shake = Math.max(0, this.cam.shake - dt * CONFIG.camera.shakeDecayPerSec);
+
+    this.updatePlayer(dt);
+    this.updateSpawner(dt);
+    this.updateEnemies(dt);
+    this.updateProjectiles(dt);
+    this.updateEnemyProjectiles(dt);
+    this.updateWaves(dt);
+    this.updateLightnings(dt);
+    this.updateGems(dt);
+    updateParticles(dt);
+
+    // Smooth camera follow (lower CONFIG.camera.followSmoothness = snappier)
+    this.cam.x = lerp(this.cam.x, this.player.x, 1-Math.pow(CONFIG.camera.followSmoothness, dt));
+    this.cam.y = lerp(this.cam.y, this.player.y, 1-Math.pow(CONFIG.camera.followSmoothness, dt));
+  }
+
+  updatePlayer(dt){
+    const p=this.player;
+    p.iframe = Math.max(0, p.iframe-dt);
+
+    // Movement
+    const v = Input.getMoveVector();
+    const sp = p.speed * p.speedMult;
+    p.vx = v.x * sp;
+    p.vy = v.y * sp;
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    if(v.mag > CONFIG.input.facingUpdateThreshold){ p.facing.x=v.x/v.mag; p.facing.y=v.y/v.mag }
+
+    // Soft world bounds
+    const R = CONFIG.world.arenaRadius;
+    const d = Math.hypot(p.x,p.y);
+    if(d>R){ p.x = p.x*R/d; p.y = p.y*R/d }
+
+    // Regen
+    if(p.regen>0 && p.hp<p.maxHp){ p.hp = Math.min(p.maxHp, p.hp + p.regen*dt) }
+
+    // Weapons (auto-fire)
+    for(const w of p.weapons){
+      const L = w.def.levels ? w.def.levels[w.level] : null;
+      const cd = L ? L.cooldown*p.cdMult : 999;
+      w.timer -= dt;
+      if(w.timer<=0 && w.def.id!=='orbit'){
+        w.def.onFire(p, this, L);
+        w.timer = cd;
+      }
+    }
+
+    // Orbital weapon (always-on satellites)
+    this.updateOrbitals(dt);
+  }
+
+  updateOrbitals(dt){
+    const p=this.player;
+    const w = p.weapons.find(w=>w.def.id==='orbit');
+    if(!w) return;
+    const L = w.def.levels[w.level];
+    p.orbitTheta += L.spin * dt;
+    // Damage enemies in collision with orbital positions
+    for(let i=0;i<L.count;i++){
+      const a = p.orbitTheta + (i*TAU/L.count);
+      const ox = p.x + Math.cos(a)*L.radius;
+      const oy = p.y + Math.sin(a)*L.radius;
+      // Simple radius check
+      this.enemies.forEachAlive(e=>{
+        const d = (e.x-ox)*(e.x-ox)+(e.y-oy)*(e.y-oy);
+        const r = (L.size+e.radius);
+        if(d < r*r){
+          // Throttle: tag with hit timer
+          e._orbHit = (e._orbHit||0) - dt;
+          if(e._orbHit<=0){
+            this.damageEnemy(e, L.dmg*p.dmgMult * dt * 8, false);
+            e._orbHit = 0.18;
+          }
+        }
+      });
+      // store for draw
+      L._cx = ox; L._cy = oy;
+    }
+  }
+
+  updateSpawner(dt){
+    // Decay interval over time
+    const t = clamp(this.elapsed/CONFIG.spawn.intervalDecayTime, 0, 1);
+    this.spawnInterval = lerp(CONFIG.spawn.intervalStart, CONFIG.spawn.intervalMin, t);
+
+    this.spawnTimer -= dt;
+    if(this.spawnTimer<=0){
+      this.spawnEnemy();
+      // Bonus spawns ramp up over time (chance set per-tier in CONFIG.spawn)
+      if(this.elapsed>120 && Math.random()<CONFIG.spawn.extraSpawnChanceAfter120s) this.spawnEnemy();
+      if(this.elapsed>300 && Math.random()<CONFIG.spawn.extraSpawnChanceAfter300s) this.spawnEnemy();
+      this.spawnTimer = this.spawnInterval;
+    }
+
+    // Boss / burst events triggered at fixed timestamps (CONFIG.spawn.burstAt)
+    for(const t of CONFIG.spawn.burstAt){
+      if(this.elapsed>=t && !this.bossTriggered.has(t)){
+        this.bossTriggered.add(t);
+        this.spawnBoss(this.bossTriggered.size-1);
+        this.spawnBurst(CONFIG.spawn.burstSize);
+      }
+    }
+  }
+
+  updateEnemies(dt){
+    const p=this.player;
+    this.enemies.forEachAlive(e=>{
+      e.hitFlash = Math.max(0, e.hitFlash - dt);
+      let dx=p.x-e.x, dy=p.y-e.y;
+      const d=Math.hypot(dx,dy)||1;
+      dx/=d; dy/=d;
+
+      if(e.behavior==='chase'){
+        e.vx = dx*e.speed; e.vy = dy*e.speed;
+      } else if(e.behavior==='shooter'){
+        // keep distance
+        const ideal = 280;
+        if(d>ideal+30){ e.vx=dx*e.speed; e.vy=dy*e.speed }
+        else if(d<ideal-30){ e.vx=-dx*e.speed; e.vy=-dy*e.speed }
+        else { e.vx*=0.85; e.vy*=0.85 }
+        e.shootCD -= dt;
+        if(e.shootCD<=0 && d<420){
+          this.spawnEnemyProjectile(e.x,e.y, dx*e.shotSpeed, dy*e.shotSpeed, e.shotDmg);
+          e.shootCD = e.shootRate;
+        }
+      }
+
+      // Apply knockback
+      e.x += (e.vx + e.knockX)*dt;
+      e.y += (e.vy + e.knockY)*dt;
+      e.knockX *= 0.85; e.knockY *= 0.85;
+
+      // Player contact damage (DPS-based — scales by CONFIG.difficulty.touchDamageRate)
+      const pd = (e.x-p.x)*(e.x-p.x)+(e.y-p.y)*(e.y-p.y);
+      const pr = e.radius+p.radius;
+      if(pd < pr*pr){
+        this.damagePlayer(e.dmg * dt * CONFIG.difficulty.touchDamageRate);
+        // small repulsion to prevent enemies stacking on player
+        e.knockX = -dx * CONFIG.difficulty.contactKnockback;
+        e.knockY = -dy * CONFIG.difficulty.contactKnockback;
+      }
+    });
+
+    // Enemy-vs-enemy soft separation
+    const arr = this.enemies.items;
+    for(let i=0;i<arr.length;i++){
+      const a=arr[i]; if(!a.alive) continue;
+      for(let j=i+1;j<arr.length;j++){
+        const b=arr[j]; if(!b.alive) continue;
+        const dx=b.x-a.x, dy=b.y-a.y;
+        const dd=dx*dx+dy*dy;
+        const rr=(a.radius+b.radius);
+        if(dd>0 && dd<rr*rr){
+          const d=Math.sqrt(dd);
+          const overlap=(rr-d)*0.5;
+          const nx=dx/d, ny=dy/d;
+          a.x-=nx*overlap*0.5; a.y-=ny*overlap*0.5;
+          b.x+=nx*overlap*0.5; b.y+=ny*overlap*0.5;
+        }
+      }
+    }
+  }
+
+  updateProjectiles(dt){
+    this.projectiles.forEachAlive(pr=>{
+      pr.life -= dt;
+      if(pr.life<=0){ pr.alive=false; return }
+      pr.x += pr.vx*dt;
+      pr.y += pr.vy*dt;
+      // collide with enemies
+      this.enemies.forEachAlive(e=>{
+        if(pr.hitSet && pr.hitSet.has(e)) return;
+        const d = (e.x-pr.x)*(e.x-pr.x)+(e.y-pr.y)*(e.y-pr.y);
+        const r = e.radius+pr.radius;
+        if(d<r*r){
+          this.damageEnemy(e, pr.dmg, false);
+          pr.hitSet && pr.hitSet.add(e);
+          if(pr.pierce>0){ pr.pierce-=1 } else { pr.alive=false }
+          emitParticles(pr.x, pr.y, CONFIG.particles.projectileHitCount,
+            {color:pr.color, speed:[40,120], life:[0.1,0.3], size:[1,3]});
+        }
+      });
+    });
+  }
+
+  updateEnemyProjectiles(dt){
+    const p=this.player;
+    this.eProjectiles.forEachAlive(pr=>{
+      pr.life -= dt;
+      if(pr.life<=0){ pr.alive=false; return }
+      pr.x += pr.vx*dt;
+      pr.y += pr.vy*dt;
+      const d = (p.x-pr.x)*(p.x-pr.x)+(p.y-pr.y)*(p.y-pr.y);
+      const r = p.radius+pr.radius;
+      if(d<r*r){
+        this.damagePlayer(pr.dmg);
+        pr.alive=false;
+      }
+    });
+  }
+
+  updateWaves(dt){
+    for(let i=this.waves.length-1;i>=0;i--){
+      const w=this.waves[i];
+      w.life -= dt;
+      const t = 1 - w.life/w.maxLife;
+      w.r = w.maxR * t;
+      // damage enemies in band (once per wave)
+      this.enemies.forEachAlive(e=>{
+        if(w.hit.has(e)) return;
+        const dd=(e.x-w.x)*(e.x-w.x)+(e.y-w.y)*(e.y-w.y);
+        const inner = (w.r-20)*(w.r-20);
+        const outer = w.r*w.r;
+        if(dd>=inner && dd<=outer){
+          this.damageEnemy(e, w.dmg, false);
+          w.hit.add(e);
+          // Push enemies outward from wave center
+          const ang=Math.atan2(e.y-w.y, e.x-w.x);
+          e.knockX += Math.cos(ang) * CONFIG.difficulty.waveKnockback;
+          e.knockY += Math.sin(ang) * CONFIG.difficulty.waveKnockback;
+        }
+      });
+      if(w.life<=0) this.waves.splice(i,1);
+    }
+  }
+
+  updateLightnings(dt){
+    for(let i=this.lightnings.length-1;i>=0;i--){
+      this.lightnings[i].life -= dt;
+      if(this.lightnings[i].life<=0) this.lightnings.splice(i,1);
+    }
+  }
+
+  updateGems(dt){
+    const p=this.player;
+    const G = CONFIG.gems;
+    // Magnet range = player base * passive magnetMult
+    const mr = p.pickupRadius * p.magnetMult;
+    this.gems.forEachAlive(g=>{
+      // Decay initial pop velocity
+      g.vx *= G.drag; g.vy *= G.drag;
+      g.bobT += dt * G.bobSpeed;
+      // Magnetic attraction toward player
+      const dx=p.x-g.x, dy=p.y-g.y;
+      const d=Math.hypot(dx,dy)||1;
+      if(d < mr * G.magnetRangeBoost){
+        // Pull strength scales from min (far) to max (close)
+        const pull = lerp(G.magnetPullMin, G.magnetPullMax, 1 - d/(mr*G.magnetRangeBoost));
+        g.vx += dx/d * pull * dt * G.magnetPullMultiplier;
+        g.vy += dy/d * pull * dt * G.magnetPullMultiplier;
+      }
+      g.x += g.vx*dt; g.y += g.vy*dt;
+      // Pickup check (small buffer beyond player radius makes it forgiving)
+      if(d < p.radius + G.pickupBuffer){
+        Audio.SFX.pickup();
+        this.giveXP(g.value);
+        emitParticles(g.x, g.y, CONFIG.particles.gemPickupCount,
+          {color:G.color, speed:[40,140], life:[0.15,0.3], size:[1,3], glow:true});
+        g.alive=false;
+      }
+    });
+  }
+
+  /* ---------- render ---------- */
+  draw(){
+    const ctx=this.ctx;
+    const cam = this.cam;
+    const cx = this.W/2, cy = this.H/2;
+    const shakeMult = Settings.get('screenShake') ? 1 : 0;
+    const glow = Settings.get('performance')==='low' ? 0 : 1;
+    let sx = (Math.random()-0.5) * cam.shake * CONFIG.camera.shakeIntensity * shakeMult;
+    let sy = (Math.random()-0.5) * cam.shake * CONFIG.camera.shakeIntensity * shakeMult;
+
+    ctx.save();
+    ctx.fillStyle = CONFIG.world.bgColor;
+    ctx.fillRect(0,0,this.W,this.H);
+
+    // Grid
+    const gs = CONFIG.world.gridSize;
+    ctx.strokeStyle = CONFIG.world.gridColor;
+    ctx.lineWidth = 1;
+    const ox = -((cam.x+sx) % gs);
+    const oy = -((cam.y+sy) % gs);
+    ctx.beginPath();
+    for(let x=ox; x<this.W; x+=gs){ ctx.moveTo(x,0); ctx.lineTo(x,this.H) }
+    for(let y=oy; y<this.H; y+=gs){ ctx.moveTo(0,y); ctx.lineTo(this.W,y) }
+    ctx.stroke();
+
+    // World transform
+    ctx.translate(cx - cam.x - sx, cy - cam.y - sy);
+
+    // Pickup radius indicator (subtle)
+    const p=this.player;
+    if(this.state==='PLAYING'){
+      ctx.beginPath();
+      ctx.arc(p.x,p.y, p.pickupRadius*p.magnetMult, 0, TAU);
+      ctx.strokeStyle='#4ade8022'; ctx.lineWidth=1; ctx.stroke();
+    }
+
+    // XP gems (diamond shape with glow)
+    this.gems.forEachAlive(g=>{
+      const bob = Math.sin(g.bobT) * CONFIG.gems.bobAmount;
+      ctx.fillStyle = CONFIG.gems.color;
+      ctx.shadowColor = CONFIG.gems.color;
+      ctx.shadowBlur = CONFIG.gems.glowBlur * glow;
+      ctx.beginPath();
+      ctx.moveTo(g.x,   g.y-5+bob);
+      ctx.lineTo(g.x+5, g.y+bob);
+      ctx.lineTo(g.x,   g.y+5+bob);
+      ctx.lineTo(g.x-5, g.y+bob);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur=0;
+    });
+
+    // Enemies
+    this.enemies.forEachAlive(e=>{
+      ctx.fillStyle = e.hitFlash>0 ? '#fff' : e.color;
+      if(e.boss){ ctx.shadowColor=e.color; ctx.shadowBlur=18 * glow }
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur=0;
+      // outline
+      ctx.strokeStyle = '#0008'; ctx.lineWidth=2; ctx.stroke();
+      // Boss HP bar (sized via CONFIG.visuals.bossHpBar*)
+      if(e.boss){
+        const bw = CONFIG.visuals.bossHpBarWidth;
+        const bh = CONFIG.visuals.bossHpBarHeight;
+        const yOff = e.radius + CONFIG.visuals.bossHpBarOffset;
+        ctx.fillStyle='#000a';
+        ctx.fillRect(e.x-bw/2, e.y-yOff, bw, bh);
+        ctx.fillStyle='#ef4444';
+        ctx.fillRect(e.x-bw/2, e.y-yOff, bw*(e.hp/e.maxHp), bh);
+      }
+    });
+
+    // Player
+    // Idle pulse animation — multiplier oscillates around 1.0
+    const pul = 1 + Math.sin(performance.now() * CONFIG.player.pulseSpeed) * CONFIG.player.pulseAmount;
+    if(p.iframe>0 && Math.floor(performance.now()/CONFIG.player.blinkFrequencyMs)%2) {
+      // skip drawing this frame for blink effect during i-frames
+    } else {
+      ctx.fillStyle = '#4ade80';
+      ctx.shadowColor='#4ade80'; ctx.shadowBlur=12 * glow;
+      ctx.beginPath(); ctx.arc(p.x,p.y, p.radius*pul, 0, TAU); ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+      // Facing direction indicator dot
+      ctx.fillStyle='#fff';
+      ctx.beginPath();
+      ctx.arc(
+        p.x + p.facing.x * CONFIG.player.facingDotDistance,
+        p.y + p.facing.y * CONFIG.player.facingDotDistance,
+        CONFIG.player.facingDotRadius, 0, TAU);
+      ctx.fill();
+    }
+
+    // Orbitals
+    const orb = p.weapons.find(w=>w.def.id==='orbit');
+    if(orb){
+      const L = orb.def.levels[orb.level];
+      for(let i=0;i<L.count;i++){
+        const a = p.orbitTheta + (i*TAU/L.count);
+        const ox = p.x + Math.cos(a)*L.radius;
+        const oy = p.y + Math.sin(a)*L.radius;
+        ctx.fillStyle='#22d3ee';
+        ctx.shadowColor='#22d3ee'; ctx.shadowBlur=10 * glow;
+        ctx.beginPath(); ctx.arc(ox,oy,L.size,0,TAU); ctx.fill();
+        ctx.shadowBlur=0;
+      }
+    }
+
+    // Player projectiles
+    this.projectiles.forEachAlive(pr=>{
+      ctx.fillStyle=pr.color;
+      ctx.shadowColor=pr.color; ctx.shadowBlur=10 * glow;
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,pr.radius,0,TAU); ctx.fill();
+      ctx.shadowBlur=0;
+    });
+    // Enemy projectiles
+    this.eProjectiles.forEachAlive(pr=>{
+      ctx.fillStyle=pr.color;
+      ctx.shadowColor=pr.color; ctx.shadowBlur=8 * glow;
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,pr.radius,0,TAU); ctx.fill();
+      ctx.shadowBlur=0;
+    });
+
+    // Waves
+    for(const w of this.waves){
+      const a = w.life/w.maxLife;
+      ctx.strokeStyle = w.color;
+      ctx.globalAlpha = a;
+      ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.arc(w.x,w.y,w.r,0,TAU); ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+
+    // Lightnings
+    for(const l of this.lightnings){
+      ctx.strokeStyle = l.color;
+      ctx.globalAlpha = l.life/l.maxLife;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = l.color; ctx.shadowBlur=12 * glow;
+      ctx.beginPath();
+      // jagged line
+      const segs=6;
+      ctx.moveTo(l.x1,l.y1);
+      for(let i=1;i<segs;i++){
+        const t=i/segs;
+        const mx = lerp(l.x1,l.x2,t) + (Math.random()-0.5)*16;
+        const my = lerp(l.y1,l.y2,t) + (Math.random()-0.5)*16;
+        ctx.lineTo(mx,my);
+      }
+      ctx.lineTo(l.x2,l.y2);
+      ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.globalAlpha=1;
+    }
+
+    // Particles
+    particles.forEachAlive(pt=>{
+      const a = pt.life/pt.maxLife;
+      ctx.globalAlpha = pt.fade ? a : 1;
+      ctx.fillStyle = pt.color;
+      if(pt.glow){ ctx.shadowColor=pt.color; ctx.shadowBlur=8 * glow }
+      ctx.beginPath(); ctx.arc(pt.x,pt.y,pt.size*a + 0.5,0,TAU); ctx.fill();
+      ctx.shadowBlur=0;
+    });
+    ctx.globalAlpha=1;
+
+    ctx.restore();
+  }
+
+  /* ---------- HUD update ---------- */
+  drawHUD(){
+    document.getElementById('hpFill').style.width = (this.player.hp/this.player.maxHp*100)+'%';
+    document.getElementById('xpFill').style.width = (this.player.xp/this.player.xpToNext*100)+'%';
+    document.getElementById('lvlNum').textContent = this.player.level;
+    document.getElementById('kills').textContent = 'KILLS '+this.kills;
+    document.getElementById('timer').textContent = fmtTime(this.elapsed);
+  }
+
+  /* ---------- level up choices ---------- */
+  buildUpgradeChoices(){
+    const p=this.player;
+    const choices = [];
+
+    // Weapon options: unlock new (if <6 weapons) or level existing
+    for(const def of WEAPONS){
+      const w = p.weapons.find(w=>w.def.id===def.id);
+      if(w){
+        if(def.levels && w.level < def.levels.length-1){
+          choices.push({
+            kind:'weapon-upgrade', def,
+            name:def.name, desc:`${def.desc} → Level ${w.level+2}`,
+            icon:def.icon, lvl:w.level+1
+          });
+        }
+      } else if(p.weapons.length < CONFIG.player.maxWeapons){
+        choices.push({
+          kind:'weapon-new', def,
+          name:def.name, desc:def.desc + ' (NEW)',
+          icon:def.icon, lvl:0
+        });
+      }
+    }
+
+    // Passive options
+    for(const ps of PASSIVES){
+      const stacks = p.pickedUpgrades[ps.id]||0;
+      if(stacks < ps.maxStacks){
+        choices.push({
+          kind:'passive', ps,
+          name:ps.name, desc:ps.desc,
+          icon:ps.icon, lvl:stacks
+        });
+      }
+    }
+
+    // Pick 3 random non-repeating
+    const out=[];
+    while(out.length<3 && choices.length){
+      const idx = Math.floor(Math.random()*choices.length);
+      out.push(choices.splice(idx,1)[0]);
+    }
+    // Pad with heal if nothing left
+    while(out.length<3){
+      out.push({kind:'heal', name:'FIELD MEDIC', desc:'Restore 30% Max HP', icon:'＋', lvl:0});
+    }
+    return out;
+  }
+
+  showLevelUp(){
+    this.state='LEVEL_UP';
+    Audio.SFX.levelUp();
+    const choices = this.buildUpgradeChoices();
+    const wrap = document.getElementById('upgradeChoices');
+    wrap.innerHTML='';
+    this.upgradeButtons = [];
+    choices.forEach((c,i)=>{
+      const card=document.createElement('div');
+      card.className='upgrade-card';
+      card.innerHTML=`
+        <div class="upg-icon">${c.icon}</div>
+        <div class="upg-meta">
+          <div class="upg-name">${c.name}</div>
+          <div class="upg-desc">${c.desc}</div>
+          ${c.lvl>0?`<div class="upg-lvl">Current: Lv ${c.lvl}</div>`:''}
+        </div>`;
+      card.addEventListener('click', ()=>this.applyUpgrade(c));
+      wrap.appendChild(card);
+      this.upgradeButtons.push(card);
+    });
+    this.upgradeFocus = 0;
+    this.updateFocus(this.upgradeButtons, 0);
+    document.getElementById('levelUp').style.display='flex';
+  }
+  applyUpgrade(c){
+    Audio.SFX.upgrade();
+    const p=this.player;
+    if(c.kind==='weapon-new'){ this.addWeapon(c.def) }
+    else if(c.kind==='weapon-upgrade'){ this.upgradeWeapon(c.def.id) }
+    else if(c.kind==='passive'){
+      c.ps.apply(p);
+      p.pickedUpgrades[c.ps.id] = (p.pickedUpgrades[c.ps.id]||0)+1;
+    }
+    else if(c.kind==='heal'){ p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.3) }
+
+    document.getElementById('levelUp').style.display='none';
+    this.state='PLAYING';
+    if(this._pendingLevelUps>0){
+      this._pendingLevelUps--;
+      setTimeout(()=>this.showLevelUp(),50);
+    }
+  }
+
+  /* ---------- focus helper for keyboard/gamepad ---------- */
+  updateFocus(buttons, idx){
+    buttons.forEach((b,i)=>b.classList.toggle('focused', i===idx));
+  }
+
+  /* ---------- state transitions ---------- */
+  startRun(){
+    this.state='PLAYING';
+    this.elapsed=0; this.kills=0;
+    this.player = this.makePlayer();
+    this.cam = {x:0,y:0,shake:0};
+    this.enemies.killAll(); this.projectiles.killAll();
+    this.eProjectiles.killAll(); this.gems.killAll(); particles.killAll();
+    this.waves.length=0; this.lightnings.length=0;
+    this.spawnTimer = CONFIG.spawn.initialDelay;
+    this.bossTriggered.clear();
+
+    // Equip the starter weapon (id from CONFIG.player.startingWeaponId)
+    const starterDef = WEAPONS.find(w => w.id === CONFIG.player.startingWeaponId) || WEAPONS[0];
+    this.addWeapon(starterDef);
+
+    document.getElementById('menu').style.display='none';
+    document.getElementById('gameOver').style.display='none';
+    document.getElementById('howto').style.display='none';
+    document.getElementById('pause').style.display='none';
+    Input.showJoystick(true);
+  }
+  pause(){
+    if(this.state!=='PLAYING') return;
+    this.state='PAUSED';
+    document.getElementById('pause').style.display='flex';
+    this.menuButtons = [...document.querySelectorAll('#pause .btn')];
+    this.menuFocus=0; this.updateFocus(this.menuButtons,0);
+  }
+  resume(){
+    if(this.state!=='PAUSED') return;
+    this.state='PLAYING';
+    document.getElementById('pause').style.display='none';
+  }
+  gameOver(victory){
+    this.state = victory ? 'VICTORY' : 'GAME_OVER';
+    if(victory){ Audio.SFX.win() } else { Audio.SFX.die() }
+    document.getElementById('goTitle').textContent = victory?'VICTORY':'YOU DIED';
+    document.getElementById('goTitle').style.color = victory?'var(--accent)':'var(--warn)';
+    document.getElementById('goStats').textContent =
+      `Survived ${fmtTime(this.elapsed)} · ${this.kills} kills · Level ${this.player.level}`;
+    document.getElementById('gameOver').style.display='flex';
+    this.menuButtons = [...document.querySelectorAll('#gameOver .btn')];
+    this.menuFocus=0; this.updateFocus(this.menuButtons,0);
+    Input.showJoystick(false);
+  }
+
+  /* ---------- input glue ---------- */
+  handleMenuKeys(){
+    Input.pollGamepad();
+
+    // ----- Settings screen handling -----
+    // IMPORTANT: This must run BEFORE the pause toggle. Otherwise pressing
+    // Escape while the settings overlay is open during PAUSED state would
+    // resume the game underneath the still-visible settings screen.
+    const settingsOpen = document.getElementById('settings').style.display === 'flex';
+    if(settingsOpen){
+      const rows = this.settingsRows;
+      if(!rows || !rows.length) return;
+      const upPressed   = Input.consumeJustPressed('ArrowUp')   || Input.consumeJustPressed('KeyW') || Input.gpJust(12);
+      const downPressed = Input.consumeJustPressed('ArrowDown') || Input.consumeJustPressed('KeyS') || Input.gpJust(13);
+      const leftPressed = Input.consumeJustPressed('ArrowLeft') || Input.consumeJustPressed('KeyA') || Input.gpJust(14);
+      const rightPressed= Input.consumeJustPressed('ArrowRight')|| Input.consumeJustPressed('KeyD') || Input.gpJust(15);
+      const confirm     = Input.consumeJustPressed('Enter')     || Input.consumeJustPressed('Space') || Input.gpJust(0);
+      // Escape, Backspace, P, and gamepad B all back out of settings
+      const back        = Input.consumeJustPressed('Escape')    || Input.consumeJustPressed('Backspace') ||
+                          Input.consumeJustPressed('KeyP')      || Input.gpJust(1) || Input.gpJust(9);
+
+      if(upPressed)   { this.settingsFocus = (this.settingsFocus-1+rows.length)%rows.length; Audio.SFX.click() }
+      if(downPressed) { this.settingsFocus = (this.settingsFocus+1)%rows.length; Audio.SFX.click() }
+      this.updateFocus(rows, this.settingsFocus);
+
+      const focused = rows[this.settingsFocus];
+      if(focused && focused.classList.contains('setting-row')){
+        const key = focused.dataset.setting;
+        if(key === 'volume'){
+          if(leftPressed)  bumpVolume(-0.1);
+          if(rightPressed) bumpVolume(+0.1);
+        } else if(leftPressed || rightPressed){
+          cycleSegment(key);
+        }
+      } else if(focused && focused.id === 'settingsBack'){
+        if(confirm) focused.click();
+      }
+      if(back) document.getElementById('settingsBack').click();
+      return; // settings was open — skip all other input handling this frame
+    }
+
+    // ----- Pause toggle (only runs when settings is NOT open) -----
+    if(this.state==='PLAYING'){
+      if(Input.consumeJustPressed('Escape') || Input.consumeJustPressed('KeyP') || Input.gpJust(9)){
+        this.pause();
+      }
+    } else if(this.state==='PAUSED'){
+      if(Input.consumeJustPressed('Escape') || Input.consumeJustPressed('KeyP') || Input.gpJust(9)){
+        this.resume();
+      }
+    }
+
+    // ----- Menu navigation (main menu, pause, level-up, game-over) -----
+    const navList = (
+      this.state==='LEVEL_UP' ? this.upgradeButtons :
+      this.state==='MENU'     ? [...document.querySelectorAll('#menu .btn')] :
+      this.state==='PAUSED'   ? this.menuButtons :
+      (this.state==='GAME_OVER'||this.state==='VICTORY') ? this.menuButtons :
+      null
+    );
+
+    if(!navList || !navList.length) return;
+
+    let focus = this.state==='LEVEL_UP' ? this.upgradeFocus : this.menuFocus;
+    const upPressed   = Input.consumeJustPressed('ArrowUp')   || Input.consumeJustPressed('KeyW') || Input.gpJust(12);
+    const downPressed = Input.consumeJustPressed('ArrowDown') || Input.consumeJustPressed('KeyS') || Input.gpJust(13);
+    const confirm     = Input.consumeJustPressed('Enter')     || Input.consumeJustPressed('Space') || Input.gpJust(0);
+
+    if(upPressed)   focus = (focus-1+navList.length)%navList.length;
+    if(downPressed) focus = (focus+1)%navList.length;
+    if(upPressed||downPressed) Audio.SFX.click();
+
+    if(this.state==='LEVEL_UP'){ this.upgradeFocus=focus } else { this.menuFocus=focus }
+    this.updateFocus(navList, focus);
+
+    if(confirm){ navList[focus].click() }
+  }
+}
+
+/* =============================================================
+   SECTION 13 — BOOTSTRAP & MAIN LOOP
+   -------------------------------------------------------------
+   Wires up the DOM (buttons, settings UI, audio unlock), instantiates
+   the Game, and starts the requestAnimationFrame loop.
+
+   The main loop:
+     1. Polls input + handles menu navigation
+     2. Calls game.update(dt) (no-op when not in PLAYING state)
+     3. Calls game.draw() and game.drawHUD()
+     4. Prunes expired damage numbers
+     5. Clears one-shot input flags
+
+   Audio is unlocked on the first user gesture (click / touch / key)
+   to satisfy browser autoplay policies.
+   ============================================================= */
+const game = new Game();
+
+// Wire UI
+document.getElementById('startBtn').addEventListener('click', ()=>{ Audio.init(); Audio.SFX.click(); game.startRun() });
+document.getElementById('howtoBtn').addEventListener('click', ()=>{
+  Audio.init(); Audio.SFX.click();
+  document.getElementById('menu').style.display='none';
+  document.getElementById('howto').style.display='flex';
+});
+document.getElementById('howtoBack').addEventListener('click', ()=>{
+  Audio.SFX.click();
+  document.getElementById('howto').style.display='none';
+  document.getElementById('menu').style.display='flex';
+});
+document.getElementById('pauseBtn').addEventListener('click', ()=>{
+  if(game.state==='PLAYING') game.pause();
+  else if(game.state==='PAUSED') game.resume();
+});
+document.getElementById('resumeBtn').addEventListener('click', ()=>{ Audio.SFX.click(); game.resume() });
+document.getElementById('quitBtn').addEventListener('click', ()=>{
+  Audio.SFX.click();
+  document.getElementById('pause').style.display='none';
+  document.getElementById('menu').style.display='flex';
+  game.state='MENU';
+  Input.showJoystick(false);
+});
+document.getElementById('retryBtn').addEventListener('click', ()=>{ Audio.SFX.click(); game.startRun() });
+document.getElementById('menuBtn').addEventListener('click', ()=>{
+  Audio.SFX.click();
+  document.getElementById('gameOver').style.display='none';
+  document.getElementById('menu').style.display='flex';
+  game.state='MENU';
+  Input.showJoystick(false);
+});
+
+// ===== Settings screen wiring =====
+let _settingsReturnTo = 'menu'; // 'menu' or 'pause'
+
+function openSettings(from){
+  _settingsReturnTo = from;
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('pause').style.display = 'none';
+  document.getElementById('settings').style.display = 'flex';
+  refreshSettingsUI();
+  game.settingsRows = [...document.querySelectorAll('#settings .setting-row'),
+                        document.getElementById('settingsBack')];
+  game.settingsFocus = 0;
+  game.updateFocus(game.settingsRows, 0);
+}
+function closeSettings(){
+  document.getElementById('settings').style.display = 'none';
+  if(_settingsReturnTo === 'pause'){
+    document.getElementById('pause').style.display = 'flex';
+    game.menuButtons = [...document.querySelectorAll('#pause .btn')];
+    game.menuFocus = 0; game.updateFocus(game.menuButtons, 0);
+  } else {
+    document.getElementById('menu').style.display = 'flex';
+    game.menuButtons = [...document.querySelectorAll('#menu .btn')];
+    game.menuFocus = 0; game.updateFocus(game.menuButtons, 0);
+  }
+}
+
+function refreshSettingsUI(){
+  // Volume
+  const v = Settings.get('volume');
+  document.getElementById('volFill').style.width  = (v*100)+'%';
+  document.getElementById('volValue').textContent = Math.round(v*100)+'%';
+  // Segmented controls
+  document.querySelectorAll('.segmented').forEach(seg=>{
+    const key = seg.dataset.seg;
+    const val = String(Settings.get(key));
+    seg.querySelectorAll('.seg').forEach(b=>{
+      b.classList.toggle('active', b.dataset.value === val);
+    });
+  });
+}
+
+function bumpVolume(delta){
+  const newVol = Math.max(0, Math.min(1, Settings.get('volume') + delta));
+  Settings.set('volume', newVol);
+  if(Settings.get('muted') && newVol > 0){ Settings.set('muted', false) }
+  refreshSettingsUI();
+  Audio.SFX.click();
+}
+
+function cycleSegment(key){
+  // For each segmented setting, flip to next value
+  const map = {
+    muted: [false, true],
+    stickSide: ['left','right'],
+    performance: ['high','low'],
+    screenShake: [true, false],
+    damageNumbers: [true, false],
+  };
+  const opts = map[key]; if(!opts) return;
+  const cur = Settings.get(key);
+  const idx = opts.findIndex(o => String(o) === String(cur));
+  const next = opts[(idx+1) % opts.length];
+  Settings.set(key, next);
+  refreshSettingsUI();
+  Audio.SFX.click();
+}
+
+// Volume +/- buttons
+document.querySelectorAll('[data-vol]').forEach(b=>{
+  b.addEventListener('click', ()=>bumpVolume(parseInt(b.dataset.vol,10) * 0.1));
+});
+
+// Segmented buttons (click to set value directly)
+document.querySelectorAll('.segmented .seg').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    const seg = b.parentElement;
+    const key = seg.dataset.seg;
+    let val = b.dataset.value;
+    if(val==='true') val=true; else if(val==='false') val=false;
+    Settings.set(key, val);
+    refreshSettingsUI();
+    Audio.SFX.click();
+  });
+});
+
+// Open / close settings
+document.getElementById('settingsBtn').addEventListener('click', ()=>{ Audio.init(); Audio.SFX.click(); openSettings('menu') });
+document.getElementById('pauseSettingsBtn').addEventListener('click', ()=>{ Audio.SFX.click(); openSettings('pause') });
+document.getElementById('settingsBack').addEventListener('click', ()=>{ Audio.SFX.click(); closeSettings() });
+
+// Init menu focus
+game.menuButtons = [...document.querySelectorAll('#menu .btn')];
+
+// Audio unlock on first user interaction
+['click','touchstart','keydown'].forEach(ev=>addEventListener(ev, ()=>Audio.init(), {once:true}));
+
+// Main loop
+let last = performance.now();
+function loop(now){
+  // Clamp delta-time so a backgrounded tab returning doesn't simulate a huge jump
+  const dt = Math.min(CONFIG.frame.maxDt, (now-last)/1000);
+  last = now;
+
+  game.handleMenuKeys();
+  game.update(dt);
+  game.draw();
+  game.drawHUD();
+  pruneDamage();
+  Input.endFrame();
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Hide loading on first frame
+addEventListener('load', ()=>{
+  Input.showJoystick(false); // hidden until run starts
+});
+</script>
+</body>
+</html>
